@@ -1,8 +1,6 @@
 
 <div align="center">
 
-  <img src="./public/assets/icons/app-icon.png" alt="NeonRed Logo" width="140" />
-
   # ⚡ NeonRed Soundpad
   
   **The Ultimate High-Performance Audio Command Center for Windows**
