@@ -1,6 +1,8 @@
 
 <div align="center">
 
+  <img src="./public/assets/icons/app-icon.png" alt="NeonRed Logo" width="140" />
+
   # ⚡ NeonRed Soundpad
   
   **The Ultimate High-Performance Audio Command Center for Windows**
@@ -49,13 +51,13 @@ It allows you to inject high-quality music and sound effects directly into your 
 *   **Low Power Mode:** Dynamically simplifies animations if your system is under heavy load (FPS < 30).
 
 ### 🎨 Visualizer Studio & UI
-*   **Reactive Visualizer:** Real-time audio bars that react to your music (customizable height, sensitivity, and density).
+*   **Synced Visualizer:** Mini Player visualizer now syncs perfectly with the main engine in real-time.
 *   **Neon Aesthetics:** A beautiful dark-mode interface with red neon glows and glass-morphism effects.
 *   **Color Adaptation:** The UI automatically extracts colors from album art to match the vibe.
 
 ### 🎹 Advanced Control
 *   **Music Library:** Full-featured music player with playlist support and shuffle/repeat.
-*   **Metadata Editor:** Right-click any track to edit Title, Artist, or copy info to clipboard.
+*   **Mini Player:** Redesigned compact mode with large artwork and synchronized visualizer.
 *   **Global Hotkeys:** Trigger sounds instantly from any game or application.
 *   **Audio Trimming:** Built-in editor to set start/end points for any sound.
 
@@ -67,7 +69,7 @@ It allows you to inject high-quality music and sound effects directly into your 
 ## 📥 Installation
 
 1.  Go to the [**Releases Page**](https://github.com/RADINMNX2/neonred-soundpad/releases/latest).
-2.  Download the latest `.exe` installer (e.g., `NeonRed.SoundPad.Setup.1.1.1.exe`).
+2.  Download the latest `.exe` installer (e.g., `NeonRed.SoundPad.Setup.1.1.2.exe`).
 3.  Run the installer.
 4.  The app will launch automatically.
 
