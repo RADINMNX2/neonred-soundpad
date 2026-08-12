@@ -69,7 +69,9 @@
     "win": {
       "target": "nsis",
       "icon": "public/favicon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "forceCodeSigning": false,
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,

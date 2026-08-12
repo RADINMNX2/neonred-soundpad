@@ -15,7 +15,6 @@ import PlayerSettingsModal from '../components/PlayerSettingsModal';
 
 interface MusicPlayerProps {
   monitorDeviceId: string;
-  injectorDeviceId: string;
   masterVolume: number;
   initialFile?: string; 
 }
@@ -25,7 +24,6 @@ const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
   monitorDeviceId, 
-  injectorDeviceId, 
   masterVolume,
   initialFile
 }) => {
@@ -97,6 +95,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const gainNodeRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const eqNodesRef = useRef<BiquadFilterNode[]>([]);
+  // Keep a ref to the latest monitorDeviceId so the audio engine can access it without stale closures
+  const monitorDeviceIdRef = useRef<string>(monitorDeviceId);
+  useEffect(() => { monitorDeviceIdRef.current = monitorDeviceId; }, [monitorDeviceId]);
   
   // Track the *intended* source string to compare against, avoiding browser encoding mismatches
   const currentAudioSrcRef = useRef<string | null>(null);
@@ -240,6 +241,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     audio.crossOrigin = "anonymous";
     audioElementRef.current = audio;
 
+    // Immediately route audio element to the monitor device (not VB-Audio injector)
+    // This must happen before the first play() call.
+    if (monitorDeviceIdRef.current && typeof (audio as any).setSinkId === 'function') {
+      (audio as any).setSinkId(monitorDeviceIdRef.current).catch(console.warn);
+    }
+
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
     analyserRef.current = analyser;
@@ -267,6 +274,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         });
         currentNode.connect(analyser);
         analyser.connect(masterGain);
+        // Route to ctx.destination. MusicPlayer's AudioContext is completely separate
+        // from SoundPad's AudioContext — they never share any nodes or streams.
         masterGain.connect(ctx.destination);
     } catch (e) { console.error(e); }
 
@@ -321,21 +330,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const normalizedPath = track.path ? track.path.replace(/\\/g, '/') : null;
         const newSrc = normalizedPath ? `file://${normalizedPath}` : track.url;
         
+        const doPlay = async () => {
+            // Re-apply sinkId before every play to prevent browser from resetting it on src change
+            if (monitorDeviceIdRef.current && typeof (audio as any).setSinkId === 'function') {
+                await (audio as any).setSinkId(monitorDeviceIdRef.current).catch(console.warn);
+            }
+            if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
+            audio.play().catch(console.error);
+        };
+
         if (currentAudioSrcRef.current !== newSrc) {
             audio.src = newSrc;
             currentAudioSrcRef.current = newSrc;
-            
-            if (isPlaying) {
-                if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
-                audio.play().catch(console.error);
-            }
+            if (isPlaying) doPlay();
         } else {
-            if (isPlaying) {
-                if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
-                audio.play().catch(console.error);
-            } else {
-                audio.pause();
-            }
+            if (isPlaying) doPlay();
+            else audio.pause();
         }
     } else {
         audio.pause();

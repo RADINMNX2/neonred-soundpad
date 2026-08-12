@@ -170,7 +170,6 @@ const AppContent: React.FC = () => {
             <div className={`absolute inset-0 transition-all duration-500 ease-out ${currentPage === Page.MUSIC ? 'opacity-100 translate-y-0 scale-100 z-10' : 'opacity-0 translate-y-10 scale-95 -z-10 pointer-events-none'}`}>
                <MusicPlayer 
                   monitorDeviceId={monitorDeviceId}
-                  injectorDeviceId={injectorDeviceId}
                   masterVolume={masterVolume}
                   initialFile={incomingMusicFile}
                />
