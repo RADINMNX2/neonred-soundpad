@@ -1,0 +1,136 @@
+
+{
+  "name": "neonred-soundpad",
+  "version": "1.1.2",
+  "description": "A high-performance, modern soundboard for Windows with mic injection and real-time EQ.",
+  "main": "main.js",
+  "homepage": ".",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RADINMNX2/neonred-soundpad.git"
+  },
+  "keywords": [
+    "soundboard",
+    "electron",
+    "react",
+    "audio-routing",
+    "virtual-cable",
+    "gamer",
+    "streamer",
+    "voice-changer",
+    "discord-tools",
+    "neon-ui"
+  ],
+  "scripts": {
+    "start": "react-scripts start",
+    "prebuild": "node scripts/zip-source.js",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "clean": "rimraf build dist",
+    "electron:dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "npm run clean && npm run build && electron-builder -w",
+    "dist": "npm run clean && npm run build && electron-builder -w"
+  },
+  "author": "RADINMNX",
+  "license": "MIT",
+  "build": {
+    "extends": null,
+    "appId": "com.radinmnx.soundpad",
+    "productName": "NeonRed SoundPad",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "RADINMNX2",
+        "repo": "neonred-soundpad"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "public/assets/VB",
+        "to": "VB",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "public/source.zip",
+        "to": "source.zip"
+      }
+    ],
+    "files": [
+      "build/**/*",
+      "main.js",
+      "preload.js"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/favicon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/favicon.ico",
+      "uninstallerIcon": "public/favicon.ico",
+      "installerHeaderIcon": "public/favicon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NeonRed SoundPad"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "mp3",
+          "wav",
+          "ogg",
+          "flac",
+          "m4a"
+        ],
+        "name": "Audio File",
+        "description": "Open with MNX Musics",
+        "role": "Viewer",
+        "icon": "public/favicon.ico"
+      }
+    ]
+  },
+  "dependencies": {
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "electron-log": "^5.1.0",
+    "electron-updater": "^6.1.7",
+    "lucide-react": "^0.292.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "devDependencies": {
+    "archiver": "^6.0.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-is-dev": "^3.0.1",
+    "rimraf": "^5.0.5",
+    "wait-on": "^7.2.0",
+    "tailwindcss": "^3.4.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
