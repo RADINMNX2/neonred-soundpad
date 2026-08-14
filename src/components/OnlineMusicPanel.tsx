@@ -93,6 +93,7 @@ const OnlineMusicPanel: React.FC<OnlineMusicPanelProps> = ({ extensions, onClose
   const [loadingHome, setLoadingHome] = useState(true);
   const [selectedTrack, setSelectedTrack] = useState<OnlineTrack | null>(null);
   const searchTimer = useRef<any>(null);
+  const searchSeq = useRef(0);
 
   const enabledExts = extensions.filter(e => e.enabled);
 
@@ -120,11 +121,14 @@ const OnlineMusicPanel: React.FC<OnlineMusicPanelProps> = ({ extensions, onClose
       setSearching(false);
       return;
     }
+    const seq = ++searchSeq.current;
     setSearching(true);
     searchTimer.current = setTimeout(async () => {
       const found = await searchTracks(q, extensions, filter);
-      setResults(found);
-      setSearching(false);
+      if (seq === searchSeq.current) {
+        setResults(found);
+        setSearching(false);
+      }
     }, 450);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [query, filter, extensions]);
