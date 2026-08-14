@@ -65,6 +65,34 @@ export interface SpatiflacExtension {
   qualityOptions: QualityOption[];
   enabled: boolean;
   builtin: boolean;
+  iconUrl?: string;
+  category?: string;
+  tags?: string[];
+  registryUrl?: string;
+  sha256?: string;
+  minAppVersion?: string;
+}
+
+export interface RegistryExtension {
+  id: string;
+  name: string;
+  display_name?: string;
+  version: string;
+  description: string;
+  download_url: string;
+  sha256: string;
+  category: string;
+  tags: string[];
+  downloads: number;
+  updated_at: string;
+  min_app_version: string;
+  icon_url?: string;
+}
+
+export interface ExtensionRegistry {
+  version: number;
+  updated_at?: string;
+  extensions: RegistryExtension[];
 }
 
 export interface OnlineTrack {

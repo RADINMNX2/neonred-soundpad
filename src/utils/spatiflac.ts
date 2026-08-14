@@ -1,4 +1,5 @@
 import { FullTrackResult, OnlineTrack, QobuzStatus, QualityOption, SpatiflacExtension } from '../types';
+import { loadInstalledRegistryExtensions } from './extensionRegistry';
 
 export const EXTENSIONS_CHANGED_EVENT = 'spatiflac-extensions-changed';
 
@@ -67,15 +68,21 @@ export function getDefaultExtensions(): SpatiflacExtension[] {
 
 export function loadExtensions(): SpatiflacExtension[] {
   const defaults = getDefaultExtensions();
-  try {
-    const saved = JSON.parse(localStorage.getItem(ENABLED_KEY) || '{}');
-    defaults.forEach(e => {
-      if (typeof saved[e.id] === 'boolean') e.enabled = saved[e.id];
-    });
-  } catch {
-    // ignore corrupt state
-  }
-  return defaults;
+  const saved = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(ENABLED_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  defaults.forEach(e => {
+    if (typeof saved[e.id] === 'boolean') e.enabled = saved[e.id];
+  });
+  const registry = loadInstalledRegistryExtensions();
+  registry.forEach(e => {
+    if (typeof saved[e.id] === 'boolean') e.enabled = saved[e.id];
+  });
+  return [...defaults, ...registry];
 }
 
 export function setExtensionEnabled(id: string, enabled: boolean) {

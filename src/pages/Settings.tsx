@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { Mic2, Radio, Headphones, Volume2, RefreshCw, Monitor, Download, ShieldCheck, Waves, Zap, ChevronDown, Globe, HelpCircle, Sliders, Heart, Mail, MessageCircle, Code, FileJson, Check, Sparkles, Plug, Cpu } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Mic2, Radio, Headphones, Volume2, RefreshCw, Monitor, Download, ShieldCheck, Waves, Zap, ChevronDown, Globe, HelpCircle, Sliders, Heart, Mail, MessageCircle, Code, FileJson, Check, Sparkles, Plug, Cpu, Store, Plus, Trash2, AlertTriangle, Loader2, Package } from 'lucide-react';
 import { AudioDevice, MicEqSettings, SpatiflacExtension } from '../types';
 import MicSettingModal from '../components/MicSettingModal';
 import AdvancedAudioModal from '../components/AdvancedAudioModal';
@@ -8,6 +8,7 @@ import Mic10BandEqualizerModal from '../components/Mic10BandEqualizerModal';
 import { useLanguage } from '../context/LanguageContext';
 import { VERSION } from '../constants';
 import { loadExtensions, setExtensionEnabled, connectQobuz, getQobuzStatus, EXTENSIONS_CHANGED_EVENT } from '../utils/spatiflac';
+import { getRegistryUrls, saveRegistryUrls, fetchAllRegistries, saveInstalledRegistryExtension, removeInstalledRegistryExtension } from '../utils/extensionRegistry';
 
 interface SettingsProps {
   monitorDeviceId: string;
@@ -32,6 +33,16 @@ interface SettingsProps {
   onRefreshDevices: () => void;
   isRefreshingDevices: boolean;
   onOpenSelector: (type: 'mic' | 'injector' | 'monitor') => void;
+}
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(n => parseInt(n, 10) || 0);
+  const pb = b.split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
@@ -89,6 +100,57 @@ const Settings: React.FC<SettingsProps> = ({
       setQobuzStatus('error');
       setQobuzMsg(res.error || t('qobuzFailed'));
     }
+  };
+
+  // --- Extension Store ---
+  const [registryUrls, setRegistryUrls] = useState<string[]>(() => getRegistryUrls());
+  const [storeUrlInput, setStoreUrlInput] = useState('');
+  const [storeExts, setStoreExts] = useState<SpatiflacExtension[]>([]);
+  const [storeInstalledIds, setStoreInstalledIds] = useState<string[]>(() => loadExtensions().filter(e => !e.builtin).map(e => e.id));
+  const [storeLoading, setStoreLoading] = useState(false);
+  const [storeErrors, setStoreErrors] = useState<string[]>([]);
+  const [storeBusyId, setStoreBusyId] = useState<string | null>(null);
+
+  const refreshStore = useCallback(async () => {
+    if (registryUrls.length === 0) return;
+    setStoreLoading(true);
+    setStoreErrors([]);
+    const { extensions, errors } = await fetchAllRegistries(registryUrls);
+    setStoreExts(extensions);
+    setStoreErrors(errors);
+    setStoreLoading(false);
+  }, [registryUrls]);
+
+  useEffect(() => {
+    refreshStore();
+  }, [refreshStore]);
+
+  const updateRegistryUrls = (urls: string[]) => {
+    setRegistryUrls(urls);
+    saveRegistryUrls(urls);
+  };
+
+  const addRegistryUrl = () => {
+    const url = storeUrlInput.trim();
+    if (!url) return;
+    if (!registryUrls.includes(url)) {
+      updateRegistryUrls([...registryUrls, url]);
+    }
+    setStoreUrlInput('');
+  };
+
+  const handleInstallExt = (ext: SpatiflacExtension) => {
+    setStoreBusyId(ext.id);
+    saveInstalledRegistryExtension(ext);
+    setStoreInstalledIds(prev => [...prev.filter(id => id !== ext.id), ext.id]);
+    setStoreBusyId(null);
+    window.dispatchEvent(new CustomEvent(EXTENSIONS_CHANGED_EVENT));
+  };
+
+  const handleUninstallExt = (id: string) => {
+    removeInstalledRegistryExtension(id);
+    setStoreInstalledIds(prev => prev.filter(pid => pid !== id));
+    window.dispatchEvent(new CustomEvent(EXTENSIONS_CHANGED_EVENT));
   };
 
   useEffect(() => {
@@ -237,6 +299,100 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
 
             <p className="text-[11px] text-gray-600 mt-4 leading-relaxed font-persian flex items-start gap-1.5"><Cpu size={12} className="text-zinc-500 shrink-0 mt-0.5" />{t('spatiflacPoweredBy')}</p>
+        </section>
+
+        {/* Extension Store */}
+        <section className="bg-zinc-900/50 border border-white/5 rounded-2xl p-6 backdrop-blur-md mb-8">
+            <div className="flex items-center gap-4 mb-4"><div className="p-3 bg-gradient-to-br from-violet-600/20 to-fuchsia-600/20 rounded-xl"><Store size={24} className="text-violet-400" /></div><div><h3 className="text-xl font-semibold text-white font-persian">{t('extStoreTitle')}</h3><p className="text-sm text-gray-400 font-persian">{t('extStoreDesc')}</p></div></div>
+
+            {/* Registry URLs */}
+            <div className="p-4 bg-black/40 rounded-xl border border-white/5 mb-3">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{t('extStoreRegistryLabel')}</span>
+                <div className="flex gap-2 mt-2">
+                    <input
+                        value={storeUrlInput}
+                        onChange={e => setStoreUrlInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') addRegistryUrl(); }}
+                        placeholder={t('extStoreRegistryPlaceholder')}
+                        className="flex-1 px-3 py-2.5 bg-zinc-900/70 border border-white/10 rounded-xl text-white placeholder-gray-600 outline-none focus:border-violet-500/50 transition-all font-persian"
+                    />
+                    <button onClick={addRegistryUrl} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white font-bold text-sm transition-all active:scale-95 flex items-center gap-2"><Plus size={15} />{t('extStoreAddRegistry')}</button>
+                </div>
+                {registryUrls.length > 0 && (
+                    <div className="flex flex-col gap-1.5 mt-3">
+                        {registryUrls.map((url, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs text-gray-400 bg-zinc-900/60 rounded-lg px-3 py-2">
+                                <Globe size={12} className="text-zinc-500 shrink-0" />
+                                <span className="flex-1 truncate font-mono">{url}</span>
+                                <button onClick={() => updateRegistryUrls(registryUrls.filter(u => u !== url))} className="text-zinc-500 hover:text-red-400 transition-colors shrink-0"><Trash2 size={13} /></button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="flex items-center justify-between mt-3">
+                    <button onClick={refreshStore} disabled={storeLoading || registryUrls.length === 0} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2">
+                        <RefreshCw size={14} className={storeLoading ? 'animate-spin' : ''} />{storeLoading ? t('extStoreLoading') : t('extStoreRefresh')}
+                    </button>
+                    {storeErrors.length > 0 && <span className="text-[11px] text-amber-400 font-bold flex items-center gap-1"><AlertTriangle size={12} />{t('extStoreRegistryError')} ({storeErrors.length})</span>}
+                </div>
+            </div>
+
+            {/* Available extensions */}
+            {storeLoading ? (
+                <div className="h-32 flex flex-col items-center justify-center gap-3 text-gray-500">
+                    <Loader2 size={26} className="animate-spin text-violet-400" />
+                    <span className="text-sm font-persian">{t('extStoreLoading')}</span>
+                </div>
+            ) : storeExts.length === 0 ? (
+                <div className="h-32 flex flex-col items-center justify-center gap-2 text-gray-500 opacity-80">
+                    <Package size={36} className="text-zinc-700" />
+                    <p className="font-persian">{t('extStoreEmpty')}</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {storeExts.map(ext => {
+                        const installed = storeInstalledIds.includes(ext.id);
+                        const requiresNewer = ext.minAppVersion && compareVersions(VERSION, ext.minAppVersion) < 0;
+                        return (
+                            <div key={ext.id} className={`p-4 rounded-xl border transition-all ${installed ? 'bg-black/40 border-violet-500/30' : 'bg-black/20 border-white/5 hover:border-white/15'}`} style={installed ? { boxShadow: `0 0 18px ${ext.color}18` } : {}}>
+                                <div className="flex items-start gap-3">
+                                    {ext.iconUrl ? (
+                                        <img src={ext.iconUrl} alt="" className="w-11 h-11 rounded-xl object-cover border border-white/10 shrink-0" />
+                                    ) : (
+                                        <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `linear-gradient(135deg, ${ext.color}, ${ext.color}88)` }}>{ext.name.charAt(0)}</div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h4 className="text-white font-bold text-sm">{ext.name}</h4>
+                                            <span className="text-[10px] font-mono text-zinc-500">v{ext.version}</span>
+                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase" style={{ color: ext.color, backgroundColor: `${ext.color}1a`, border: `1px solid ${ext.color}44` }}>{ext.category || 'extension'}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1 font-persian line-clamp-2">{ext.description}</p>
+                                        <div className="flex flex-wrap gap-1 mt-1.5">
+                                            {(ext.tags || []).slice(0, 3).map(tag => (
+                                                <span key={tag} className="px-1.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-[9px] text-gray-400">#{tag}</span>
+                                            ))}
+                                        </div>
+                                        {requiresNewer && <span className="inline-flex items-center gap-1 mt-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30"><AlertTriangle size={9} />{t('extStoreRequires')} {ext.minAppVersion}</span>}
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-end gap-2 mt-3">
+                                    {installed ? (
+                                        <>
+                                            <span className="px-2 py-1 rounded-md text-[10px] font-bold uppercase flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"><Check size={11} />{t('extStoreInstalled')}</span>
+                                            <button onClick={() => handleUninstallExt(ext.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all flex items-center gap-1.5"><Trash2 size={12} />{t('extStoreUninstall')}</button>
+                                        </>
+                                    ) : (
+                                        <button onClick={() => handleInstallExt(ext)} disabled={storeBusyId === ext.id} className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-violet-600 hover:bg-violet-500 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5">
+                                            {storeBusyId === ext.id ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}{t('extStoreInstall')}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </section>
 
         {/* Audio Configuration Card */}

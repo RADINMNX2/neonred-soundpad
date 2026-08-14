@@ -79,6 +79,21 @@ export const translations = {
     qobuzCreateAccount: "No account yet? Create a free Qobuz account",
     qobuzConnected: "Qobuz connected — native FLAC downloads enabled",
     qobuzFailed: "Could not connect. Check your credentials.",
+
+    // Extension Store
+    extStoreTitle: "Extension Store",
+    extStoreDesc: "Install community extensions from a SpatiFLAC registry for more providers.",
+    extStoreRegistryLabel: "REGISTRY URLS",
+    extStoreRegistryPlaceholder: "https://.../registry.json",
+    extStoreAddRegistry: "Add",
+    extStoreRefresh: "Refresh Store",
+    extStoreLoading: "Loading extensions...",
+    extStoreRegistryError: "A registry could not be loaded",
+    extStoreEmpty: "No extensions found. Add a registry URL or check your connection.",
+    extStoreInstall: "Install",
+    extStoreInstalled: "INSTALLED",
+    extStoreUninstall: "Uninstall",
+    extStoreRequires: "Requires app v",
     
     // Settings
     settingsTitle: "Settings",
@@ -319,6 +334,21 @@ export const translations = {
     qobuzCreateAccount: "اکانت نداری؟ یه اکانت رایگان کوبوز بساز",
     qobuzConnected: "کوبوز متصل شد — دانلود FLAC اصلی فعال شد",
     qobuzFailed: "اتصال برقرار نشد. ایمیل و رمز رو چک کن.",
+
+    // Extension Store
+    extStoreTitle: "فروشگاه اکستنشن",
+    extStoreDesc: "اکستنشن‌های انجمن رو از ریجستری اسپاتی‌فلاک نصب کن تا سرویس‌های بیشتری داشته باشی.",
+    extStoreRegistryLabel: "آدرس ریجستری",
+    extStoreRegistryPlaceholder: "https://.../registry.json",
+    extStoreAddRegistry: "افزودن",
+    extStoreRefresh: "به‌روزرسانی فروشگاه",
+    extStoreLoading: "در حال بارگیری اکستنشن‌ها...",
+    extStoreRegistryError: "یکی از ریجستری‌ها بارگیری نشد",
+    extStoreEmpty: "اکستنشنی پیدا نشد. یه آدرس ریجستری اضافه کن یا اتصالت رو چک کن.",
+    extStoreInstall: "نصب",
+    extStoreInstalled: "نصب شده",
+    extStoreUninstall: "حذف",
+    extStoreRequires: "نیازمند نسخه ",
     
     // Settings
     settingsTitle: "تنظیمات و اینا",
