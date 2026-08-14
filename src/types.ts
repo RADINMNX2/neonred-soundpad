@@ -23,6 +23,7 @@ export interface MusicTrack {
   path?: string;
   duration: number;
   cover?: string;
+  onlineId?: string;
 }
 
 // --- Spatiflac / Online Music ---
@@ -36,6 +37,20 @@ export interface QualityOption {
   available: boolean;
   requires?: string;
   isPreview?: boolean;
+  engine?: 'preview' | 'full' | 'flac';
+}
+
+export interface FullTrackResult {
+  success: boolean;
+  path?: string;
+  cached?: boolean;
+  format?: string;
+  error?: string;
+}
+
+export interface QobuzStatus {
+  email: string;
+  hasPassword: boolean;
 }
 
 export interface SpatiflacExtension {
@@ -196,6 +211,15 @@ declare global {
       // Online Music Download
       onlineDownload: (opts: { url: string; filename: string; downloadId: string }) => Promise<{ success: boolean; path?: string; error?: string }>;
       onOnlineDownloadProgress: (callback: (data: { downloadId: string; percent: number }) => void) => () => void;
+
+      // Online Music Full-Track Engine
+      onlineFullTrack: (opts: { query: string; cacheKey?: string; downloadId?: string }) => Promise<FullTrackResult>;
+      onlineDownloadTrack: (opts: { query: string; cacheKey?: string; filename?: string; format: 'best' | 'flac' | 'preview'; previewUrl?: string; downloadId?: string }) => Promise<{ success: boolean; path?: string; cached?: boolean; error?: string }>;
+
+      // Qobuz FLAC Provider
+      onlineSetQobuz: (opts: { email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
+      onlineGetQobuz: () => Promise<QobuzStatus>;
+      onlineQobuzDownload: (opts: { query: string; filename?: string; formatId?: number; downloadId?: string }) => Promise<{ success: boolean; path?: string; cached?: boolean; error?: string }>;
     };
     jsmediatags?: any;
   }

@@ -63,6 +63,22 @@ export const translations = {
     fromExtension: "via",
     downloadFailed: "Download failed",
     playingPreview: "PLAYING PREVIEW",
+    playingFullTrack: "Loading full track...",
+    playPreviewFallback: "Full track unavailable — playing 30s preview instead",
+    playFailed: "Couldn't start playback",
+    flacNote: "FLAC is real lossless — downloaded from a connected Qobuz account, or converted losslessly by the built-in engine. No account needed.",
+    
+    // Qobuz account
+    qobuzTitle: "Qobuz FLAC Account (optional)",
+    qobuzDesc: "Connect a Qobuz account for native high-resolution FLAC downloads.",
+    qobuzConnectedBadge: "CONNECTED",
+    qobuzEmail: "Email",
+    qobuzPassword: "Password",
+    qobuzSaving: "Connecting...",
+    qobuzConnect: "Connect",
+    qobuzCreateAccount: "No account yet? Create a free Qobuz account",
+    qobuzConnected: "Qobuz connected — native FLAC downloads enabled",
+    qobuzFailed: "Could not connect. Check your credentials.",
     
     // Settings
     settingsTitle: "Settings",
@@ -287,6 +303,22 @@ export const translations = {
     fromExtension: "با",
     downloadFailed: "دانلود انجام نشد",
     playingPreview: "در حال پخش پیش‌نمایش",
+    playingFullTrack: "در حال بارگیری نسخه کامل...",
+    playPreviewFallback: "نسخه کامل در دسترس نبود — پیش‌نمایش ۳۰ ثانیه پخش شد",
+    playFailed: "پخش شروع نشد",
+    flacNote: "FLAC واقعاً بدون افت کیفیت است — از اکانت کوبوز متصل دانلود می‌شود یا توسط موتور داخلی بدون افت تبدیل می‌شود. نیازی به اکانت نیست.",
+    
+    // Qobuz account
+    qobuzTitle: "اکانت FLAC کوبوز (اختیاری)",
+    qobuzDesc: "برای دانلود FLAC با کیفیت بالا، اکانت کوبوز رو وصل کن.",
+    qobuzConnectedBadge: "متصل",
+    qobuzEmail: "ایمیل",
+    qobuzPassword: "رمز عبور",
+    qobuzSaving: "در حال اتصال...",
+    qobuzConnect: "اتصال",
+    qobuzCreateAccount: "اکانت نداری؟ یه اکانت رایگان کوبوز بساز",
+    qobuzConnected: "کوبوز متصل شد — دانلود FLAC اصلی فعال شد",
+    qobuzFailed: "اتصال برقرار نشد. ایمیل و رمز رو چک کن.",
     
     // Settings
     settingsTitle: "تنظیمات و اینا",

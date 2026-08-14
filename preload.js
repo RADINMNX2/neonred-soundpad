@@ -100,5 +100,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sub = (e, data) => callback(data);
       ipcRenderer.on('online-download-progress', sub);
       return () => ipcRenderer.removeListener('online-download-progress', sub);
-  }
+  },
+
+  // Online Music Full-Track Engine
+  onlineFullTrack: (opts) => ipcRenderer.invoke('online-full-track', opts),
+  onlineDownloadTrack: (opts) => ipcRenderer.invoke('online-download-track', opts),
+
+  // Qobuz FLAC Provider
+  onlineSetQobuz: (opts) => ipcRenderer.invoke('online-set-qobuz', opts),
+  onlineGetQobuz: () => ipcRenderer.invoke('online-get-qobuz'),
+  onlineQobuzDownload: (opts) => ipcRenderer.invoke('online-qobuz-download', opts)
 });

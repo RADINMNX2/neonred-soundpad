@@ -7,7 +7,7 @@ import AdvancedAudioModal from '../components/AdvancedAudioModal';
 import Mic10BandEqualizerModal from '../components/Mic10BandEqualizerModal';
 import { useLanguage } from '../context/LanguageContext';
 import { VERSION } from '../constants';
-import { loadExtensions, setExtensionEnabled, EXTENSIONS_CHANGED_EVENT } from '../utils/spatiflac';
+import { loadExtensions, setExtensionEnabled, connectQobuz, getQobuzStatus, EXTENSIONS_CHANGED_EVENT } from '../utils/spatiflac';
 
 interface SettingsProps {
   monitorDeviceId: string;
@@ -62,6 +62,34 @@ const Settings: React.FC<SettingsProps> = ({
   const [sourceDownloadStatus, setSourceDownloadStatus] = useState<'idle' | 'downloading' | 'success'>('idle');
 
   const [spatiflacExts, setSpatiflacExts] = useState<SpatiflacExtension[]>(() => loadExtensions());
+
+  const [qobuzEmail, setQobuzEmail] = useState('');
+  const [qobuzPassword, setQobuzPassword] = useState('');
+  const [qobuzStatus, setQobuzStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+  const [qobuzMsg, setQobuzMsg] = useState('');
+  const [qobuzConnected, setQobuzConnected] = useState(false);
+
+  useEffect(() => {
+    getQobuzStatus().then(s => {
+      setQobuzEmail(s.email);
+      setQobuzConnected(!!s.email && s.hasPassword);
+    });
+  }, []);
+
+  const handleQobuzConnect = async () => {
+    if (!qobuzEmail.trim() || !qobuzPassword || qobuzStatus === 'saving') return;
+    setQobuzStatus('saving');
+    setQobuzMsg('');
+    const res = await connectQobuz(qobuzEmail.trim(), qobuzPassword);
+    if (res.success) {
+      setQobuzStatus('done');
+      setQobuzConnected(true);
+      setQobuzMsg(t('qobuzConnected'));
+    } else {
+      setQobuzStatus('error');
+      setQobuzMsg(res.error || t('qobuzFailed'));
+    }
+  };
 
   useEffect(() => {
     const handler = () => setSpatiflacExts(loadExtensions());
@@ -170,6 +198,42 @@ const Settings: React.FC<SettingsProps> = ({
                         </div>
                     </div>
                 ))}
+            </div>
+
+            {/* Qobuz FLAC Account */}
+            <div className="mt-4 p-4 rounded-xl bg-black/40 border border-white/10">
+                <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-600 to-red-600 flex items-center justify-center text-white font-black text-sm">Q</div>
+                    <div>
+                        <h4 className="text-white font-bold text-sm">{t('qobuzTitle')}</h4>
+                        <p className="text-[11px] text-gray-500 font-persian">{t('qobuzDesc')}</p>
+                    </div>
+                    {qobuzConnected && <span className="ml-auto shrink-0 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase flex items-center gap-1"><Check size={11} />{t('qobuzConnectedBadge')}</span>}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                        type="email"
+                        value={qobuzEmail}
+                        onChange={e => { setQobuzEmail(e.target.value); setQobuzConnected(false); }}
+                        placeholder={t('qobuzEmail')}
+                        className="flex-1 px-3 py-2.5 bg-zinc-900/70 border border-white/10 rounded-xl text-white placeholder-gray-600 outline-none focus:border-pink-500/50 transition-all font-persian"
+                    />
+                    <input
+                        type="password"
+                        value={qobuzPassword}
+                        onChange={e => setQobuzPassword(e.target.value)}
+                        placeholder={t('qobuzPassword')}
+                        className="flex-1 px-3 py-2.5 bg-zinc-900/70 border border-white/10 rounded-xl text-white placeholder-gray-600 outline-none focus:border-pink-500/50 transition-all font-persian"
+                    />
+                    <button onClick={handleQobuzConnect} disabled={qobuzStatus === 'saving'} className="px-4 py-2.5 rounded-xl bg-gradient-to-br from-pink-600 to-red-600 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2">
+                        {qobuzStatus === 'saving' ? <><RefreshCw size={14} className="animate-spin" />{t('qobuzSaving')}</> : <><Plug size={14} />{t('qobuzConnect')}</>}
+                    </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 mt-3">
+                    <a href="https://www.qobuz.com/register" target="_blank" rel="noreferrer" className="text-[11px] text-pink-500 hover:text-pink-400 font-bold font-persian">{t('qobuzCreateAccount')}</a>
+                    {qobuzStatus === 'done' && <span className="text-[11px] text-emerald-400 font-bold">{qobuzMsg}</span>}
+                    {qobuzStatus === 'error' && <span className="text-[11px] text-red-400 font-bold">{qobuzMsg}</span>}
+                </div>
             </div>
 
             <p className="text-[11px] text-gray-600 mt-4 leading-relaxed font-persian flex items-start gap-1.5"><Cpu size={12} className="text-zinc-500 shrink-0 mt-0.5" />{t('spatiflacPoweredBy')}</p>

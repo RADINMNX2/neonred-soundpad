@@ -1,4 +1,4 @@
-import { OnlineTrack, QualityOption, SpatiflacExtension } from '../types';
+import { FullTrackResult, OnlineTrack, QobuzStatus, QualityOption, SpatiflacExtension } from '../types';
 
 export const EXTENSIONS_CHANGED_EVENT = 'spatiflac-extensions-changed';
 
@@ -20,9 +20,9 @@ export const BUILTIN_EXTENSIONS: SpatiflacExtension[] = [
     enabled: true,
     builtin: true,
     qualityOptions: [
-      { id: 'FLAC', label: 'FLAC Lossless', description: '16-bit / 44.1kHz', ext: 'flac', bitrate: '~950kbps', available: false, requires: 'Apple Music account' },
-      { id: 'AAC_256', label: 'AAC 256kbps', description: 'High quality AAC preview', ext: 'm4a', bitrate: '256kbps', available: true, isPreview: true },
-      { id: 'MP3_128', label: 'MP3 128kbps', description: 'Standard preview stream', ext: 'mp3', bitrate: '128kbps', available: true, isPreview: true },
+      { id: 'FLAC', label: 'FLAC Lossless', description: 'Full track · real lossless FLAC', ext: 'flac', bitrate: '~950kbps', available: true, engine: 'flac' },
+      { id: 'BEST', label: 'Best Quality', description: 'Full track · highest available audio', ext: 'm4a', bitrate: '~320kbps', available: true, engine: 'full' },
+      { id: 'PREVIEW', label: 'Preview (30s)', description: 'Quick 30-second preview · not saved', ext: 'm4a', bitrate: '256kbps', available: true, isPreview: true, engine: 'preview' },
     ],
   },
   {
@@ -37,9 +37,9 @@ export const BUILTIN_EXTENSIONS: SpatiflacExtension[] = [
     enabled: true,
     builtin: true,
     qualityOptions: [
-      { id: 'FLAC', label: 'FLAC Lossless', description: '16-bit / 44.1kHz', ext: 'flac', bitrate: '~950kbps', available: false, requires: 'Spotify Premium account' },
-      { id: 'MP3_320', label: 'MP3 320kbps', description: 'High quality preview', ext: 'mp3', bitrate: '320kbps', available: true, isPreview: true },
-      { id: 'OGG_160', label: 'OGG 160kbps', description: 'Efficient preview stream', ext: 'ogg', bitrate: '160kbps', available: true, isPreview: true },
+      { id: 'FLAC', label: 'FLAC Lossless', description: 'Full track · real lossless FLAC', ext: 'flac', bitrate: '~950kbps', available: true, engine: 'flac' },
+      { id: 'BEST', label: 'Best Quality', description: 'Full track · highest available audio', ext: 'mp3', bitrate: '~320kbps', available: true, engine: 'full' },
+      { id: 'PREVIEW', label: 'Preview (30s)', description: 'Quick 30-second preview · not saved', ext: 'mp3', bitrate: '128kbps', available: true, isPreview: true, engine: 'preview' },
     ],
   },
   {
@@ -54,9 +54,9 @@ export const BUILTIN_EXTENSIONS: SpatiflacExtension[] = [
     enabled: true,
     builtin: true,
     qualityOptions: [
-      { id: 'FLAC_HD', label: 'FLAC HD', description: '24-bit / 48kHz', ext: 'flac', bitrate: '~1400kbps', available: false, requires: 'Amazon Music Unlimited' },
-      { id: 'AAC_256', label: 'AAC 256kbps', description: 'High quality preview', ext: 'm4a', bitrate: '256kbps', available: true, isPreview: true },
-      { id: 'MP3_128', label: 'MP3 128kbps', description: 'Standard preview stream', ext: 'mp3', bitrate: '128kbps', available: true, isPreview: true },
+      { id: 'FLAC', label: 'FLAC HD', description: 'Full track · lossless HD FLAC', ext: 'flac', bitrate: '~1400kbps', available: true, engine: 'flac' },
+      { id: 'BEST', label: 'Best Quality', description: 'Full track · highest available audio', ext: 'm4a', bitrate: '~320kbps', available: true, engine: 'full' },
+      { id: 'PREVIEW', label: 'Preview (30s)', description: 'Quick 30-second preview · not saved', ext: 'm4a', bitrate: '256kbps', available: true, isPreview: true, engine: 'preview' },
     ],
   },
 ];
@@ -203,6 +203,42 @@ export function pickQuality(ext: SpatiflacExtension, qualityId: string): Quality
   return ext.qualityOptions.find(q => q.id === qualityId) || ext.qualityOptions[0];
 }
 
+function buildSearchQuery(track: OnlineTrack): string {
+  return `${track.artist} ${track.title}`.trim();
+}
+
+export async function resolveFullTrack(track: OnlineTrack, onProgress?: (percent: number) => void): Promise<FullTrackResult> {
+  try {
+    const downloadId = crypto.randomUUID();
+    const cleanup = window.electronAPI.onOnlineDownloadProgress((data) => {
+      if (data.downloadId === downloadId && onProgress) onProgress(data.percent);
+    });
+    const query = buildSearchQuery(track);
+    const cacheKey = `${track.artist} - ${track.title}`;
+    const result = await window.electronAPI.onlineFullTrack({ query, cacheKey, downloadId });
+    cleanup();
+    return result;
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Full-track resolution failed' };
+  }
+}
+
+export async function getQobuzStatus(): Promise<QobuzStatus> {
+  try {
+    return await window.electronAPI.onlineGetQobuz();
+  } catch {
+    return { email: '', hasPassword: false };
+  }
+}
+
+export async function connectQobuz(email: string, password: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    return await window.electronAPI.onlineSetQobuz({ email, password });
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 export function resolveDownloadSource(track: OnlineTrack, quality: QualityOption): { url: string; ext: string; isFallback: boolean } {
   if (quality.available && track.previewUrl) {
     return { url: track.previewUrl, ext: quality.ext, isFallback: false };
@@ -218,21 +254,40 @@ export async function downloadOnlineTrack(
   quality: QualityOption,
   onProgress?: (percent: number) => void
 ): Promise<{ success: boolean; path?: string; error?: string; isFallback: boolean; fallbackExt?: string }> {
+  const downloadId = crypto.randomUUID();
+  const cleanup = window.electronAPI.onOnlineDownloadProgress((data) => {
+    if (data.downloadId === downloadId && onProgress) onProgress(data.percent);
+  });
+  const safeTitle = `${track.artist} - ${track.title}`.replace(/[\\/:*?"<>|]/g, '_');
+  const query = buildSearchQuery(track);
   try {
-    const source = resolveDownloadSource(track, quality);
-    const downloadId = crypto.randomUUID();
-    const cleanup = window.electronAPI.onOnlineDownloadProgress((data) => {
-      if (data.downloadId === downloadId && onProgress) onProgress(data.percent);
-    });
-    const safeTitle = `${track.artist} - ${track.title}`.replace(/[\\/:*?"<>|]/g, '_');
-    const filename = `${safeTitle}.${source.ext}`;
-    const result = await window.electronAPI.onlineDownload({ url: source.url, filename, downloadId });
-    cleanup();
-    if (result.success) {
-      return { success: true, path: result.path, isFallback: source.isFallback, fallbackExt: source.ext };
+    if (quality.engine === 'flac') {
+      const q = await getQobuzStatus();
+      if (q.email && q.hasPassword) {
+        const native = await window.electronAPI.onlineQobuzDownload({ query, filename: safeTitle, downloadId });
+        if (native.success) {
+          cleanup();
+          return { success: true, path: native.path, isFallback: false, fallbackExt: 'flac' };
+        }
+      }
+      const result = await window.electronAPI.onlineDownloadTrack({ query, filename: safeTitle, format: 'flac', downloadId });
+      cleanup();
+      if (result.success) return { success: true, path: result.path, isFallback: false, fallbackExt: 'flac' };
+      return { success: false, error: result.error, isFallback: false };
     }
+    if (quality.engine === 'full') {
+      const result = await window.electronAPI.onlineDownloadTrack({ query, filename: safeTitle, format: 'best', downloadId });
+      cleanup();
+      if (result.success) return { success: true, path: result.path, isFallback: false };
+      return { success: false, error: result.error, isFallback: false };
+    }
+    const source = resolveDownloadSource(track, quality);
+    const result = await window.electronAPI.onlineDownload({ url: source.url, filename: `${safeTitle}.m4a`, downloadId });
+    cleanup();
+    if (result.success) return { success: true, path: result.path, isFallback: source.isFallback, fallbackExt: source.ext };
     return { success: false, error: result.error, isFallback: source.isFallback };
   } catch (e: any) {
+    cleanup();
     return { success: false, error: e.message || 'Download failed', isFallback: false };
   }
 }

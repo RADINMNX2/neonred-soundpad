@@ -8,7 +8,7 @@ import OnlineTrackDetailModal from './OnlineTrackDetailModal';
 interface OnlineMusicPanelProps {
   extensions: SpatiflacExtension[];
   onClose: () => void;
-  onPlay: (track: OnlineTrack) => void;
+  onPlay: (track: OnlineTrack, contextTracks: OnlineTrack[]) => Promise<{ success: boolean; isPreview?: boolean; cached?: boolean; error?: string }>;
   onDownload: (track: OnlineTrack, quality: QualityOption, onProgress?: (percent: number) => void) => Promise<{ success: boolean; path?: string; error?: string; isFallback: boolean; fallbackExt?: string }>;
 }
 
@@ -238,6 +238,7 @@ const OnlineMusicPanel: React.FC<OnlineMusicPanelProps> = ({ extensions, onClose
       <OnlineTrackDetailModal
         track={selectedTrack}
         extensions={enabledExts}
+        contextTracks={query.trim().length >= 2 ? results : [...featured, ...albums]}
         onClose={() => setSelectedTrack(null)}
         onPlay={onPlay}
         onDownload={onDownload}

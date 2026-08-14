@@ -6,12 +6,13 @@ import { useLanguage } from '../context/LanguageContext';
 interface OnlineTrackDetailModalProps {
   track: OnlineTrack | null;
   extensions: SpatiflacExtension[];
+  contextTracks: OnlineTrack[];
   onClose: () => void;
-  onPlay: (track: OnlineTrack) => void;
+  onPlay: (track: OnlineTrack, contextTracks: OnlineTrack[]) => Promise<{ success: boolean; isPreview?: boolean; cached?: boolean; error?: string }>;
   onDownload: (track: OnlineTrack, quality: QualityOption, onProgress?: (percent: number) => void) => Promise<{ success: boolean; path?: string; error?: string; isFallback: boolean; fallbackExt?: string }>;
 }
 
-const OnlineTrackDetailModal: React.FC<OnlineTrackDetailModalProps> = ({ track, extensions, onClose, onPlay, onDownload }) => {
+const OnlineTrackDetailModal: React.FC<OnlineTrackDetailModalProps> = ({ track, extensions, contextTracks, onClose, onPlay, onDownload }) => {
   const { t } = useLanguage();
   const ext = track ? extensions.find(e => e.id === track.extensionId) : undefined;
   const [selectedQualityId, setSelectedQualityId] = useState<string>('');
@@ -20,6 +21,7 @@ const OnlineTrackDetailModal: React.FC<OnlineTrackDetailModalProps> = ({ track, 
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<'idle' | 'done' | 'error'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
+  const [playing, setPlaying] = useState(false);
   const previewRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -32,6 +34,7 @@ const OnlineTrackDetailModal: React.FC<OnlineTrackDetailModalProps> = ({ track, 
     setProgress(0);
     setStatus('idle');
     setStatusMsg('');
+    setPlaying(false);
     if (track && ext) {
       const firstAvailable = ext.qualityOptions.find(q => q.available) || ext.qualityOptions[0];
       setSelectedQualityId(firstAvailable ? firstAvailable.id : (ext.qualityOptions[0]?.id || ''));
@@ -62,8 +65,20 @@ const OnlineTrackDetailModal: React.FC<OnlineTrackDetailModalProps> = ({ track, 
 
   const selectedQuality = ext?.qualityOptions.find(q => q.id === selectedQualityId) || ext?.qualityOptions[0];
 
-  const handlePlay = () => {
-    if (track) onPlay(track);
+  const handlePlay = async () => {
+    if (!track || playing) return;
+    setPlaying(true);
+    setStatus('idle');
+    setStatusMsg('');
+    const res = await onPlay(track, contextTracks);
+    setPlaying(false);
+    if (!res.success) {
+      setStatus('error');
+      setStatusMsg(res.error || t('playFailed'));
+    } else if (res.isPreview) {
+      setStatus('done');
+      setStatusMsg(t('playPreviewFallback'));
+    }
   };
 
   const handleDownload = async () => {
@@ -149,6 +164,12 @@ const OnlineTrackDetailModal: React.FC<OnlineTrackDetailModalProps> = ({ track, 
           <div className="mt-5">
             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">{t('qualityTitle')}</div>
             <p className="text-xs text-gray-500 mb-3 font-persian">{t('qualityDesc')}</p>
+            {selectedQuality?.engine === 'flac' && (
+              <div className="mb-3 flex items-start gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-gray-400">
+                <Disc size={14} className="text-pink-500 shrink-0 mt-0.5" />
+                <span className="font-persian">{t('flacNote')}</span>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-2">
               {ext?.qualityOptions.map(q => {
                 const active = q.id === selectedQualityId;
@@ -195,8 +216,8 @@ const OnlineTrackDetailModal: React.FC<OnlineTrackDetailModalProps> = ({ track, 
 
           {/* Actions */}
           <div className="flex items-center gap-3 mt-5 pb-1">
-            <button onClick={handlePlay} className="flex-1 px-4 py-3 rounded-2xl bg-white text-black font-bold text-sm hover:bg-gray-200 transition-all active:scale-95 flex items-center justify-center gap-2">
-              <Play size={16} className="fill-black" />{t('playOnline')}
+            <button onClick={handlePlay} disabled={playing} className="flex-1 px-4 py-3 rounded-2xl bg-white text-black font-bold text-sm hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2">
+              {playing ? <><Loader2 size={16} className="animate-spin" />{t('playingFullTrack')}</> : <><Play size={16} className="fill-black" />{t('playOnline')}</>}
             </button>
             <button onClick={togglePreview} disabled={!track.previewUrl} className={`px-4 py-3 rounded-2xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2 border disabled:opacity-40 disabled:cursor-not-allowed ${isPreviewPlaying ? 'bg-zinc-800 text-white border-white/20' : 'bg-white/5 text-white border-white/10 hover:bg-white/10'}`}>
               {isPreviewPlaying ? <Pause size={16} className="fill-current" /> : <Play size={16} />}
