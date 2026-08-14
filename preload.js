@@ -92,5 +92,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const sub = (e, time) => callback(time);
       ipcRenderer.on('seek-music-action', sub);
       return () => ipcRenderer.removeListener('seek-music-action', sub);
+  },
+
+  // Online Music Download
+  onlineDownload: (opts) => ipcRenderer.invoke('online-download', opts),
+  onOnlineDownloadProgress: (callback) => {
+      const sub = (e, data) => callback(data);
+      ipcRenderer.on('online-download-progress', sub);
+      return () => ipcRenderer.removeListener('online-download-progress', sub);
   }
 });

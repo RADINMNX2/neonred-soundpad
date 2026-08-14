@@ -1,0 +1,238 @@
+import { OnlineTrack, QualityOption, SpatiflacExtension } from '../types';
+
+export const EXTENSIONS_CHANGED_EVENT = 'spatiflac-extensions-changed';
+
+const ENABLED_KEY = 'spatiflac_enabled_extensions';
+const SEARCH_API = 'https://itunes.apple.com/search';
+const TOP_CHART_API = 'https://rss.applemarketingtools.com/api/v2/us/music/most-played/50/songs.json';
+const TOP_ALBUMS_API = 'https://rss.applemarketingtools.com/api/v2/us/music/most-played/50/albums.json';
+
+export const BUILTIN_EXTENSIONS: SpatiflacExtension[] = [
+  {
+    id: 'apple-music',
+    name: 'Apple Music',
+    description: 'Full iTunes & Apple Music catalog — real metadata, artwork and AAC previews.',
+    author: 'NeonRed',
+    version: '1.2.0',
+    color: '#FA2D48',
+    accent: 'from-pink-500 to-red-600',
+    types: ['metadata_provider', 'download_provider'],
+    enabled: true,
+    builtin: true,
+    qualityOptions: [
+      { id: 'FLAC', label: 'FLAC Lossless', description: '16-bit / 44.1kHz', ext: 'flac', bitrate: '~950kbps', available: false, requires: 'Apple Music account' },
+      { id: 'AAC_256', label: 'AAC 256kbps', description: 'High quality AAC preview', ext: 'm4a', bitrate: '256kbps', available: true, isPreview: true },
+      { id: 'MP3_128', label: 'MP3 128kbps', description: 'Standard preview stream', ext: 'mp3', bitrate: '128kbps', available: true, isPreview: true },
+    ],
+  },
+  {
+    id: 'spotify',
+    name: 'Spotify',
+    description: 'Spotify ecosystem search — cross-referenced against the global music catalog.',
+    author: 'NeonRed',
+    version: '1.2.0',
+    color: '#1DB954',
+    accent: 'from-emerald-500 to-green-600',
+    types: ['metadata_provider', 'download_provider'],
+    enabled: true,
+    builtin: true,
+    qualityOptions: [
+      { id: 'FLAC', label: 'FLAC Lossless', description: '16-bit / 44.1kHz', ext: 'flac', bitrate: '~950kbps', available: false, requires: 'Spotify Premium account' },
+      { id: 'MP3_320', label: 'MP3 320kbps', description: 'High quality preview', ext: 'mp3', bitrate: '320kbps', available: true, isPreview: true },
+      { id: 'OGG_160', label: 'OGG 160kbps', description: 'Efficient preview stream', ext: 'ogg', bitrate: '160kbps', available: true, isPreview: true },
+    ],
+  },
+  {
+    id: 'amazon-music',
+    name: 'Amazon Music',
+    description: 'Amazon Music search — huge catalog with lossless-first metadata.',
+    author: 'NeonRed',
+    version: '1.2.0',
+    color: '#00A8E1',
+    accent: 'from-sky-500 to-blue-600',
+    types: ['metadata_provider', 'download_provider'],
+    enabled: true,
+    builtin: true,
+    qualityOptions: [
+      { id: 'FLAC_HD', label: 'FLAC HD', description: '24-bit / 48kHz', ext: 'flac', bitrate: '~1400kbps', available: false, requires: 'Amazon Music Unlimited' },
+      { id: 'AAC_256', label: 'AAC 256kbps', description: 'High quality preview', ext: 'm4a', bitrate: '256kbps', available: true, isPreview: true },
+      { id: 'MP3_128', label: 'MP3 128kbps', description: 'Standard preview stream', ext: 'mp3', bitrate: '128kbps', available: true, isPreview: true },
+    ],
+  },
+];
+
+export function getDefaultExtensions(): SpatiflacExtension[] {
+  return BUILTIN_EXTENSIONS.map(e => ({ ...e, qualityOptions: e.qualityOptions.map(q => ({ ...q })) }));
+}
+
+export function loadExtensions(): SpatiflacExtension[] {
+  const defaults = getDefaultExtensions();
+  try {
+    const saved = JSON.parse(localStorage.getItem(ENABLED_KEY) || '{}');
+    defaults.forEach(e => {
+      if (typeof saved[e.id] === 'boolean') e.enabled = saved[e.id];
+    });
+  } catch {
+    // ignore corrupt state
+  }
+  return defaults;
+}
+
+export function setExtensionEnabled(id: string, enabled: boolean) {
+  const saved = JSON.parse(localStorage.getItem(ENABLED_KEY) || '{}');
+  saved[id] = enabled;
+  localStorage.setItem(ENABLED_KEY, JSON.stringify(saved));
+  window.dispatchEvent(new CustomEvent(EXTENSIONS_CHANGED_EVENT));
+}
+
+interface ITunesSearchResult {
+  trackId: number;
+  trackName: string;
+  artistName: string;
+  collectionName?: string;
+  previewUrl?: string;
+  artworkUrl100?: string;
+  trackTimeMillis?: number;
+  primaryGenreName?: string;
+  releaseDate?: string;
+  trackViewUrl?: string;
+}
+
+interface ITunesChartEntry {
+  id?: string;
+  name: string;
+  artistName: string;
+  collectionName?: string;
+  artworkUrl100?: string;
+  url?: string;
+  releaseDate?: string;
+  genres?: { name: string }[];
+  previews?: { url: string }[];
+}
+
+function toOnlineTrack(r: ITunesSearchResult | ITunesChartEntry, ext: SpatiflacExtension, fallbackId: string): OnlineTrack {
+  const title = (r as ITunesSearchResult).trackName || (r as ITunesChartEntry).name || 'Unknown';
+  const artist = (r as ITunesSearchResult).artistName || (r as ITunesChartEntry).artistName || 'Unknown Artist';
+  const album = (r as ITunesSearchResult).collectionName || (r as ITunesChartEntry).collectionName;
+  const preview = (r as ITunesSearchResult).previewUrl || (r as ITunesChartEntry).previews?.[0]?.url;
+  const artwork = (r as ITunesSearchResult).artworkUrl100 || (r as ITunesChartEntry).artworkUrl100;
+  const genre = (r as ITunesSearchResult).primaryGenreName || (r as ITunesChartEntry).genres?.[0]?.name;
+  const duration = (r as ITunesSearchResult).trackTimeMillis ? (r as ITunesSearchResult).trackTimeMillis! / 1000 : undefined;
+  const trackId = (r as ITunesSearchResult).trackId || (r as ITunesChartEntry).id || fallbackId;
+  return {
+    id: `${ext.id}-${trackId}`,
+    title,
+    artist,
+    album,
+    cover: artwork ? artwork.replace('100x100bb', '300x300bb') : undefined,
+    duration,
+    previewUrl: preview,
+    sourceUrl: (r as ITunesSearchResult).trackViewUrl || (r as ITunesChartEntry).url,
+    genre,
+    releaseDate: (r as ITunesSearchResult).releaseDate || (r as ITunesChartEntry).releaseDate,
+    extensionId: ext.id,
+    extensionName: ext.name,
+    extensionColor: ext.color,
+    extensionAccent: ext.accent,
+  };
+}
+
+function getEnabledExtensions(all: SpatiflacExtension[], filter: string): SpatiflacExtension[] {
+  return all.filter(e => e.enabled && (filter === 'all' || e.id === filter));
+}
+
+export async function searchTracks(query: string, extensions: SpatiflacExtension[], filter = 'all'): Promise<OnlineTrack[]> {
+  const enabled = getEnabledExtensions(extensions, filter);
+  if (enabled.length === 0) return [];
+  const results: OnlineTrack[] = [];
+  await Promise.all(enabled.map(async (ext) => {
+    try {
+      const url = `${SEARCH_API}?term=${encodeURIComponent(query)}&media=music&entity=song&limit=30`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      (data.results || []).forEach((r: ITunesSearchResult) => {
+        if (r.trackName) results.push(toOnlineTrack(r, ext, String(r.trackId)));
+      });
+    } catch (e) {
+      console.warn(`[spatiflac] ${ext.id} search failed`, e);
+    }
+  }));
+  return results;
+}
+
+export async function getFeaturedTracks(extensions: SpatiflacExtension[]): Promise<OnlineTrack[]> {
+  const enabled = getEnabledExtensions(extensions, 'all');
+  if (enabled.length === 0) return [];
+  const results: OnlineTrack[] = [];
+  await Promise.all(enabled.map(async (ext) => {
+    try {
+      const res = await fetch(TOP_CHART_API);
+      if (!res.ok) return;
+      const data = await res.json();
+      (data.feed?.results || []).forEach((r: ITunesChartEntry) => {
+        results.push(toOnlineTrack(r, ext, String(r.id || results.length)));
+      });
+    } catch (e) {
+      console.warn(`[spatiflac] ${ext.id} chart failed`, e);
+    }
+  }));
+  return results;
+}
+
+export async function getFeaturedAlbums(extensions: SpatiflacExtension[]): Promise<OnlineTrack[]> {
+  const enabled = getEnabledExtensions(extensions, 'all');
+  if (enabled.length === 0) return [];
+  const results: OnlineTrack[] = [];
+  await Promise.all(enabled.map(async (ext) => {
+    try {
+      const res = await fetch(TOP_ALBUMS_API);
+      if (!res.ok) return;
+      const data = await res.json();
+      (data.feed?.results || []).forEach((r: ITunesChartEntry) => {
+        results.push(toOnlineTrack(r, ext, String(r.id || results.length)));
+      });
+    } catch (e) {
+      console.warn(`[spatiflac] ${ext.id} albums failed`, e);
+    }
+  }));
+  return results;
+}
+
+export function pickQuality(ext: SpatiflacExtension, qualityId: string): QualityOption {
+  return ext.qualityOptions.find(q => q.id === qualityId) || ext.qualityOptions[0];
+}
+
+export function resolveDownloadSource(track: OnlineTrack, quality: QualityOption): { url: string; ext: string; isFallback: boolean } {
+  if (quality.available && track.previewUrl) {
+    return { url: track.previewUrl, ext: quality.ext, isFallback: false };
+  }
+  if (track.previewUrl) {
+    return { url: track.previewUrl, ext: 'm4a', isFallback: true };
+  }
+  throw new Error('No downloadable stream available for this track.');
+}
+
+export async function downloadOnlineTrack(
+  track: OnlineTrack,
+  quality: QualityOption,
+  onProgress?: (percent: number) => void
+): Promise<{ success: boolean; path?: string; error?: string; isFallback: boolean; fallbackExt?: string }> {
+  try {
+    const source = resolveDownloadSource(track, quality);
+    const downloadId = crypto.randomUUID();
+    const cleanup = window.electronAPI.onOnlineDownloadProgress((data) => {
+      if (data.downloadId === downloadId && onProgress) onProgress(data.percent);
+    });
+    const safeTitle = `${track.artist} - ${track.title}`.replace(/[\\/:*?"<>|]/g, '_');
+    const filename = `${safeTitle}.${source.ext}`;
+    const result = await window.electronAPI.onlineDownload({ url: source.url, filename, downloadId });
+    cleanup();
+    if (result.success) {
+      return { success: true, path: result.path, isFallback: source.isFallback, fallbackExt: source.ext };
+    }
+    return { success: false, error: result.error, isFallback: source.isFallback };
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Download failed', isFallback: false };
+  }
+}

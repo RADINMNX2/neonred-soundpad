@@ -1,12 +1,13 @@
 
-import React, { useState } from 'react';
-import { Mic2, Radio, Headphones, Volume2, RefreshCw, Monitor, Download, ShieldCheck, Waves, Zap, ChevronDown, Globe, HelpCircle, Sliders, Heart, Mail, MessageCircle, Code, FileJson, Check, Sparkles } from 'lucide-react';
-import { AudioDevice, MicEqSettings } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Mic2, Radio, Headphones, Volume2, RefreshCw, Monitor, Download, ShieldCheck, Waves, Zap, ChevronDown, Globe, HelpCircle, Sliders, Heart, Mail, MessageCircle, Code, FileJson, Check, Sparkles, Plug, Cpu } from 'lucide-react';
+import { AudioDevice, MicEqSettings, SpatiflacExtension } from '../types';
 import MicSettingModal from '../components/MicSettingModal';
 import AdvancedAudioModal from '../components/AdvancedAudioModal';
 import Mic10BandEqualizerModal from '../components/Mic10BandEqualizerModal';
 import { useLanguage } from '../context/LanguageContext';
 import { VERSION } from '../constants';
+import { loadExtensions, setExtensionEnabled, EXTENSIONS_CHANGED_EVENT } from '../utils/spatiflac';
 
 interface SettingsProps {
   monitorDeviceId: string;
@@ -59,6 +60,14 @@ const Settings: React.FC<SettingsProps> = ({
   const [startWithWindows, setStartWithWindows] = useState(() => localStorage.getItem('startWithWindows') === 'true');
   const [minimizeToTray, setMinimizeToTray] = useState(() => localStorage.getItem('minimizeToTray') === 'true');
   const [sourceDownloadStatus, setSourceDownloadStatus] = useState<'idle' | 'downloading' | 'success'>('idle');
+
+  const [spatiflacExts, setSpatiflacExts] = useState<SpatiflacExtension[]>(() => loadExtensions());
+
+  useEffect(() => {
+    const handler = () => setSpatiflacExts(loadExtensions());
+    window.addEventListener(EXTENSIONS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(EXTENSIONS_CHANGED_EVENT, handler);
+  }, []);
 
   const [isGainModalOpen, setIsGainModalOpen] = useState(false);
   const [isClarityModalOpen, setIsClarityModalOpen] = useState(false);
@@ -130,6 +139,40 @@ const Settings: React.FC<SettingsProps> = ({
                 <label className="flex items-center justify-between p-4 bg-black/40 rounded-xl cursor-pointer hover:bg-black/60 transition-colors"><div className="flex items-center gap-3"><Download size={20} className="text-gray-400" /><span className="text-white font-medium font-persian">{t('startWindows')}</span></div><div className={`w-12 h-6 rounded-full p-1 transition-colors ${startWithWindows ? 'bg-red-600' : 'bg-gray-700'}`} onClick={(e) => { e.preventDefault(); toggleStartWithWindows(); }}><div className={`w-4 h-4 rounded-full bg-white transition-transform ${startWithWindows ? (isRTL ? '-translate-x-6' : 'translate-x-6') : 'translate-x-0'}`}></div></div></label>
                 <label className="flex items-center justify-between p-4 bg-black/40 rounded-xl cursor-pointer hover:bg-black/60 transition-colors"><div className="flex items-center gap-3"><Monitor size={20} className="text-gray-400" /><span className="text-white font-medium font-persian">{t('minToTray')}</span></div><div className={`w-12 h-6 rounded-full p-1 transition-colors ${minimizeToTray ? 'bg-red-600' : 'bg-gray-700'}`} onClick={(e) => { e.preventDefault(); toggleMinimizeToTray(); }}><div className={`w-4 h-4 rounded-full bg-white transition-transform ${minimizeToTray ? (isRTL ? '-translate-x-6' : 'translate-x-6') : 'translate-x-0'}`}></div></div></label>
             </div>
+        </section>
+
+        {/* Spatiflac Extensions */}
+        <section className="bg-zinc-900/50 border border-white/5 rounded-2xl p-6 backdrop-blur-md mb-8">
+            <div className="flex items-center gap-4 mb-4"><div className="p-3 bg-gradient-to-br from-pink-600/20 to-red-600/20 rounded-xl"><Plug size={24} className="text-pink-500" /></div><div><h3 className="text-xl font-semibold text-white font-persian">{t('spatiflacTitle')}</h3><p className="text-sm text-gray-400 font-persian">{t('spatiflacDesc')}</p></div></div>
+
+            <div className="p-4 bg-black/40 rounded-xl border border-white/5 mb-4">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{t('spatiflacRepoLabel')}</span>
+                <div className="flex items-center gap-3 mt-2">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-600 to-red-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-pink-900/30">S</div>
+                    <div><p className="text-white font-bold text-sm">{t('spatiflacBuiltinRepo')}</p><p className="text-[11px] text-gray-500">{t('spatiflacBuiltinRepoDesc')}</p></div>
+                    <span className="ml-auto shrink-0 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase">{t('spatiflacExtensionOn')}</span>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+                {spatiflacExts.map(ext => (
+                    <div key={ext.id} className={`p-4 rounded-xl border transition-all ${ext.enabled ? 'bg-black/40 border-white/10' : 'bg-black/20 border-white/5 opacity-70'}`} style={ext.enabled ? { boxShadow: `0 0 0 1px ${ext.color}22, 0 0 18px ${ext.color}14` } : {}}>
+                        <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `linear-gradient(135deg, ${ext.color}, ${ext.color}88)` }}>{ext.name.charAt(0)}</div>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2"><h4 className="text-white font-bold text-sm">{ext.name}</h4><span className="text-[10px] font-mono text-zinc-500">v{ext.version}</span></div>
+                                <p className="text-xs text-gray-500 font-persian truncate">{ext.description}</p>
+                                <p className="text-[10px] text-gray-600 mt-0.5 truncate">{t('spatiflacQualityNote')}: {ext.qualityOptions.map(q => q.label).join(' · ')}</p>
+                            </div>
+                            <button onClick={() => setExtensionEnabled(ext.id, !ext.enabled)} className={`relative w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${ext.enabled ? '' : 'bg-zinc-700'}`} style={ext.enabled ? { backgroundColor: ext.color } : {}} title={ext.enabled ? t('spatiflacExtensionOn') : t('spatiflacExtensionOff')}>
+                                <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${ext.enabled ? (isRTL ? '-translate-x-6' : 'translate-x-6') : 'translate-x-0'}`}></div>
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <p className="text-[11px] text-gray-600 mt-4 leading-relaxed font-persian flex items-start gap-1.5"><Cpu size={12} className="text-zinc-500 shrink-0 mt-0.5" />{t('spatiflacPoweredBy')}</p>
         </section>
 
         {/* Audio Configuration Card */}

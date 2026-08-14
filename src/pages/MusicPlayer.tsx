@@ -2,16 +2,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, 
-  ListMusic, Music, Volume2, Trash2, Plus, Disc, Clock, Sliders, Check, X, MousePointer2, Settings, BarChart2, Shrink
+  ListMusic, Music, Volume2, Trash2, Plus, Disc, Clock, Sliders, Check, X, MousePointer2, Settings, BarChart2, Shrink, Globe
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import { MusicTrack, ExtendedAudioElement, VisualizerConfig } from '../types';
+import { MusicTrack, ExtendedAudioElement, VisualizerConfig, SpatiflacExtension, OnlineTrack, QualityOption } from '../types';
 import { fileToBase64, extractAlbumArt, getDominantColor, parseAudioMetadata } from '../utils/audioHelpers';
 import RealTimeVisualizer from '../components/RealTimeVisualizer';
 import EqualizerModal from '../components/EqualizerModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import MusicDetailsModal from '../components/MusicDetailsModal';
 import PlayerSettingsModal from '../components/PlayerSettingsModal';
+import OnlineMusicPanel from '../components/OnlineMusicPanel';
+import { loadExtensions, downloadOnlineTrack, EXTENSIONS_CHANGED_EVENT } from '../utils/spatiflac';
 
 interface MusicPlayerProps {
   monitorDeviceId: string;
@@ -87,6 +89,52 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   // Music Details Modal
   const [detailsTrack, setDetailsTrack] = useState<MusicTrack | null>(null);
   const [isMusicDetailsOpen, setIsMusicDetailsOpen] = useState(false);
+
+  // Online Music (Spatiflac)
+  const [onlineOpen, setOnlineOpen] = useState(false);
+  const [onlineExtensions, setOnlineExtensions] = useState<SpatiflacExtension[]>(() => loadExtensions());
+
+  useEffect(() => {
+    const handler = () => setOnlineExtensions(loadExtensions());
+    window.addEventListener(EXTENSIONS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(EXTENSIONS_CHANGED_EVENT, handler);
+  }, []);
+
+  const handleOnlinePlay = (track: OnlineTrack) => {
+    if (!track.previewUrl) return;
+    const idx = playlistRef.current.length;
+    const newTrack: MusicTrack = {
+      id: crypto.randomUUID(),
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      url: track.previewUrl,
+      duration: track.duration || 0,
+      cover: track.cover,
+    };
+    setPlaylist(prev => [...prev, newTrack]);
+    setCurrentTrackIndex(idx);
+    setIsPlaying(true);
+  };
+
+  const handleOnlineDownload = async (track: OnlineTrack, quality: QualityOption, onProgress?: (percent: number) => void) => {
+    const res = await downloadOnlineTrack(track, quality, onProgress);
+    if (res.success && res.path) {
+      const localTrack: MusicTrack = {
+        id: crypto.randomUUID(),
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        url: `file://${res.path}`,
+        path: res.path,
+        duration: track.duration || 0,
+        cover: track.cover,
+      };
+      setPlaylist(prev => [...prev, localTrack]);
+      return { success: true, path: res.path, isFallback: res.isFallback, fallbackExt: res.fallbackExt };
+    }
+    return res;
+  };
 
   // Refs for Audio System
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -521,6 +569,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <button onClick={() => setIsSelectionMode(true)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-gray-400 hover:text-white rounded-xl transition-all border border-white/5" title="Select Mode"><MousePointer2 size={18} /></button>
                     )}
                     <div className="w-px h-6 bg-white/10 mx-1"></div>
+                    <button onClick={() => setOnlineOpen(true)} className="px-3 py-2 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-pink-500/40 shadow-lg shadow-pink-900/20 hover:shadow-[0_0_20px_rgba(236,72,153,0.35)] active:scale-95"><Globe size={16} /><span>{t('onlineBtn')}</span></button>
                     <label className="cursor-pointer px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-white/5 hover:border-white/20"><Plus size={16} /><span>{t('addSongs')}</span><input type="file" multiple accept="audio/*" className="hidden" onChange={(e) => handleFileAdd(e.target.files)} /></label>
                 </div>
             </div>
@@ -614,6 +663,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 )}
             </div>
             <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/50 to-transparent pointer-events-none"></div>
+
+            {onlineOpen && (
+                <OnlineMusicPanel
+                    extensions={onlineExtensions}
+                    onClose={() => setOnlineOpen(false)}
+                    onPlay={handleOnlinePlay}
+                    onDownload={handleOnlineDownload}
+                />
+            )}
         </div>
       </div>
 

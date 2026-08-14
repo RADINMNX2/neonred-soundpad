@@ -22,6 +22,7 @@ module.exports = {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'gradient-x': 'gradient-x 15s ease infinite',
         'slide-up': 'slideUp 0.5s ease-out',
+        'slide-in-right': 'slideInRight 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
         'shimmer': 'shimmer 2s linear infinite',
         'border-flow': 'borderRotate 4s linear infinite',
         'scanline': 'scanline 4s linear infinite',
@@ -41,6 +42,10 @@ module.exports = {
         slideUp: {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        slideInRight: {
+          '0%': { transform: 'translateX(24px)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
         },
         shimmer: {
           '0%': { transform: 'translateX(-100%)' },

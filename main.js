@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, globalShortcut, Tray, screen, dialog, Menu 
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const https = require('https');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
@@ -482,6 +483,56 @@ ipcMain.handle('delete-sound-file', async (event, filePath) => {
     return { success: false, error: 'File not found' };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+});
+
+function downloadUrl(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const follow = (u, redirectsLeft) => {
+      https.get(u, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
+          return follow(res.headers.location, redirectsLeft - 1);
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`HTTP ${res.statusCode}`));
+        }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let received = 0;
+        const stream = fs.createWriteStream(destPath);
+        res.on('data', (chunk) => {
+          received += chunk.length;
+          if (total > 0) onProgress(received / total);
+        });
+        res.pipe(stream);
+        stream.on('finish', () => stream.close(() => resolve()));
+        stream.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
+        res.on('error', (err) => { stream.destroy(); fs.unlink(destPath, () => {}); reject(err); });
+      }).on('error', reject);
+    };
+    follow(url, 4);
+  });
+}
+
+ipcMain.handle('online-download', async (event, opts) => {
+  try {
+    if (!opts || !opts.url) return { success: false, error: 'Missing download URL' };
+    const downloadId = opts.downloadId || crypto.randomUUID();
+    const baseDir = path.join(app.getPath('music'), 'NeonRed Spatiflac');
+    await fs.promises.mkdir(baseDir, { recursive: true });
+    const safeName = (opts.filename || 'track').replace(/[^\w.\-() ]/g, '_');
+    const destPath = path.join(baseDir, safeName);
+    const sendProgress = (fraction) => {
+      if (event.sender && !event.sender.isDestroyed()) {
+        event.sender.send('online-download-progress', { downloadId, percent: Math.round(fraction * 100) });
+      }
+    };
+    await downloadUrl(opts.url, destPath, sendProgress);
+    return { success: true, path: destPath };
+  } catch (error) {
+    return { success: false, error: error.message || 'Download failed' };
   }
 });
 

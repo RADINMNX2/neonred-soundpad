@@ -25,6 +25,50 @@ export interface MusicTrack {
   cover?: string;
 }
 
+// --- Spatiflac / Online Music ---
+
+export interface QualityOption {
+  id: string;
+  label: string;
+  description: string;
+  ext: string;
+  bitrate?: string;
+  available: boolean;
+  requires?: string;
+  isPreview?: boolean;
+}
+
+export interface SpatiflacExtension {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  version: string;
+  color: string;
+  accent: string;
+  types: string[];
+  qualityOptions: QualityOption[];
+  enabled: boolean;
+  builtin: boolean;
+}
+
+export interface OnlineTrack {
+  id: string;
+  title: string;
+  artist: string;
+  album?: string;
+  cover?: string;
+  duration?: number;
+  previewUrl?: string;
+  sourceUrl?: string;
+  genre?: string;
+  releaseDate?: string;
+  extensionId: string;
+  extensionName: string;
+  extensionColor: string;
+  extensionAccent: string;
+}
+
 export interface MiniPlayerState {
   track: MusicTrack | null;
   isPlaying: boolean;
@@ -148,6 +192,10 @@ declare global {
       // Seeking
       seekMusic: (time: number) => void;
       onSeekMusic: (callback: (time: number) => void) => () => void;
+
+      // Online Music Download
+      onlineDownload: (opts: { url: string; filename: string; downloadId: string }) => Promise<{ success: boolean; path?: string; error?: string }>;
+      onOnlineDownloadProgress: (callback: (data: { downloadId: string; percent: number }) => void) => () => void;
     };
     jsmediatags?: any;
   }
