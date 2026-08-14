@@ -400,7 +400,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
           <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-4">
               <MessageCircle size={24} className="text-indigo-400" />
               <div className="text-xs text-indigo-300">
-                  Discord > User Settings > Voice & Video > Scroll down to "Advanced"
+                  Discord &gt; User Settings &gt; Voice &amp; Video &gt; Scroll down to "Advanced"
               </div>
           </div>
         </div>
