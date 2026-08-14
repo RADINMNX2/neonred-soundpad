@@ -523,7 +523,16 @@ ipcMain.handle('online-download', async (event, opts) => {
     const baseDir = path.join(app.getPath('music'), 'NeonRed Spatiflac');
     await fs.promises.mkdir(baseDir, { recursive: true });
     const safeName = (opts.filename || 'track').replace(/[^\w.\-() ]/g, '_');
-    const destPath = path.join(baseDir, safeName);
+    let destPath = path.join(baseDir, safeName);
+    if (fs.existsSync(destPath)) {
+      const ext = path.extname(safeName);
+      const base = safeName.slice(0, -ext.length);
+      let i = 1;
+      while (fs.existsSync(destPath)) {
+        destPath = path.join(baseDir, `${base} (${i})${ext}`);
+        i++;
+      }
+    }
     const sendProgress = (fraction) => {
       if (event.sender && !event.sender.isDestroyed()) {
         event.sender.send('online-download-progress', { downloadId, percent: Math.round(fraction * 100) });
