@@ -69,7 +69,7 @@ It allows you to inject high-quality music and sound effects directly into your 
 ## 📥 Installation
 
 1.  Go to the [**Releases Page**](https://github.com/RADINMNX2/neonred-soundpad/releases/latest).
-2.  Download the latest `.exe` installer (e.g., `NeonRed.SoundPad.Setup.1.1.2.exe`).
+2.  Download the latest `.exe` installer (e.g., `NeonRed.SoundPad.Setup.1.3.4.exe`).
 3.  Run the installer.
 4.  The app will launch automatically.
 

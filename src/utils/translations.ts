@@ -66,20 +66,8 @@ export const translations = {
     playingFullTrack: "Loading full track...",
     playPreviewFallback: "Full track unavailable — playing 30s preview instead",
     playFailed: "Couldn't start playback",
-    flacNote: "FLAC is real lossless — downloaded from a connected Qobuz account, or converted losslessly by the built-in engine. No account needed.",
+    flacNote: "FLAC is real lossless — converted losslessly by the built-in engine. No account needed.",
     
-    // Qobuz account
-    qobuzTitle: "Qobuz FLAC Account (optional)",
-    qobuzDesc: "Connect a Qobuz account for native high-resolution FLAC downloads.",
-    qobuzConnectedBadge: "CONNECTED",
-    qobuzEmail: "Email",
-    qobuzPassword: "Password",
-    qobuzSaving: "Connecting...",
-    qobuzConnect: "Connect",
-    qobuzCreateAccount: "No account yet? Create a free Qobuz account",
-    qobuzConnected: "Qobuz connected — native FLAC downloads enabled",
-    qobuzFailed: "Could not connect. Check your credentials.",
-
     // Extension Store
     extStoreTitle: "Extension Store",
     extStoreDesc: "Install community extensions from a SpatiFLAC registry for more providers.",
@@ -94,6 +82,7 @@ export const translations = {
     extStoreInstalled: "INSTALLED",
     extStoreUninstall: "Uninstall",
     extStoreRequires: "Requires app v",
+    extStoreInstallError: "Could not install extension",
     
     // Settings
     settingsTitle: "Settings",
@@ -321,20 +310,8 @@ export const translations = {
     playingFullTrack: "در حال بارگیری نسخه کامل...",
     playPreviewFallback: "نسخه کامل در دسترس نبود — پیش‌نمایش ۳۰ ثانیه پخش شد",
     playFailed: "پخش شروع نشد",
-    flacNote: "FLAC واقعاً بدون افت کیفیت است — از اکانت کوبوز متصل دانلود می‌شود یا توسط موتور داخلی بدون افت تبدیل می‌شود. نیازی به اکانت نیست.",
+    flacNote: "FLAC کاملاً بدون افت کیفیت است — توسط موتور داخلی تبدیل می‌شود. نیازی به اکانت نیست.",
     
-    // Qobuz account
-    qobuzTitle: "اکانت FLAC کوبوز (اختیاری)",
-    qobuzDesc: "برای دانلود FLAC با کیفیت بالا، اکانت کوبوز رو وصل کن.",
-    qobuzConnectedBadge: "متصل",
-    qobuzEmail: "ایمیل",
-    qobuzPassword: "رمز عبور",
-    qobuzSaving: "در حال اتصال...",
-    qobuzConnect: "اتصال",
-    qobuzCreateAccount: "اکانت نداری؟ یه اکانت رایگان کوبوز بساز",
-    qobuzConnected: "کوبوز متصل شد — دانلود FLAC اصلی فعال شد",
-    qobuzFailed: "اتصال برقرار نشد. ایمیل و رمز رو چک کن.",
-
     // Extension Store
     extStoreTitle: "فروشگاه اکستنشن",
     extStoreDesc: "اکستنشن‌های انجمن رو از ریجستری اسپاتی‌فلاک نصب کن تا سرویس‌های بیشتری داشته باشی.",
@@ -349,6 +326,7 @@ export const translations = {
     extStoreInstalled: "نصب شده",
     extStoreUninstall: "حذف",
     extStoreRequires: "نیازمند نسخه ",
+    extStoreInstallError: "اکستنشن نصب نشد",
     
     // Settings
     settingsTitle: "تنظیمات و اینا",

@@ -1,4 +1,4 @@
-import { FullTrackResult, OnlineTrack, QobuzStatus, QualityOption, SpatiflacExtension } from '../types';
+import { FullTrackResult, OnlineTrack, QualityOption, SpatiflacExtension } from '../types';
 import { loadInstalledRegistryExtensions } from './extensionRegistry';
 
 export const EXTENSIONS_CHANGED_EVENT = 'spatiflac-extensions-changed';
@@ -148,19 +148,75 @@ function getEnabledExtensions(all: SpatiflacExtension[], filter: string): Spatif
   return all.filter(e => e.enabled && (filter === 'all' || e.id === filter));
 }
 
+function isRealExtension(ext: SpatiflacExtension): boolean {
+  return !ext.builtin && !!ext.packageId;
+}
+
+function isRealExtensionTrack(track: OnlineTrack): boolean {
+  return !!track.providerId && !!track.providerTrackId;
+}
+
+function mapExtensionItem(item: any, ext: SpatiflacExtension): OnlineTrack | null {
+  if (!item) return null;
+  const providerTrackId = item.id != null ? String(item.id) : '';
+  if (!providerTrackId) return null;
+  const title = item.name || item.title || '';
+  const artist = item.artists || item.artist || '';
+  if (!title) return null;
+  const durationMs = Number(item.duration_ms || item.duration || 0);
+  return {
+    id: `${ext.id}-${providerTrackId}`,
+    title,
+    artist: artist || 'Unknown Artist',
+    album: item.album_name || item.album,
+    cover: item.cover_url || item.images || item.artwork_url,
+    duration: durationMs > 0 ? durationMs / 1000 : undefined,
+    genre: item.genre,
+    releaseDate: item.release_date || item.releaseDate,
+    sourceUrl: item.external_urls || item.url,
+    extensionId: ext.id,
+    extensionName: ext.name,
+    extensionColor: ext.color,
+    extensionAccent: ext.accent,
+    providerId: ext.packageId,
+    providerTrackId,
+  };
+}
+
+async function searchRealExtension(ext: SpatiflacExtension, query: string): Promise<OnlineTrack[]> {
+  try {
+    const result = await window.electronAPI.extensionsSearch({ packageId: ext.packageId!, query });
+    if (!result.success) return [];
+    const items = Array.isArray(result.results) ? result.results : [];
+    return items.map(i => mapExtensionItem(i, ext)).filter((t): t is OnlineTrack => !!t);
+  } catch (e) {
+    console.warn(`[spatiflac] ${ext.id} extension search failed`, e);
+    return [];
+  }
+}
+
+async function searchItunes(query: string, ext: SpatiflacExtension): Promise<OnlineTrack[]> {
+  const results: OnlineTrack[] = [];
+  const url = `${SEARCH_API}?term=${encodeURIComponent(query)}&media=music&entity=song&limit=30`;
+  const res = await fetch(url);
+  if (!res.ok) return results;
+  const data = await res.json();
+  (data.results || []).forEach((r: ITunesSearchResult) => {
+    if (r.trackName) results.push(toOnlineTrack(r, ext, String(r.trackId)));
+  });
+  return results;
+}
+
 export async function searchTracks(query: string, extensions: SpatiflacExtension[], filter = 'all'): Promise<OnlineTrack[]> {
   const enabled = getEnabledExtensions(extensions, filter);
   if (enabled.length === 0) return [];
   const results: OnlineTrack[] = [];
   await Promise.all(enabled.map(async (ext) => {
     try {
-      const url = `${SEARCH_API}?term=${encodeURIComponent(query)}&media=music&entity=song&limit=30`;
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const data = await res.json();
-      (data.results || []).forEach((r: ITunesSearchResult) => {
-        if (r.trackName) results.push(toOnlineTrack(r, ext, String(r.trackId)));
-      });
+      const found = isRealExtension(ext)
+        ? await searchRealExtension(ext, query)
+        : await searchItunes(query, ext);
+      results.push(...found);
     } catch (e) {
       console.warn(`[spatiflac] ${ext.id} search failed`, e);
     }
@@ -230,22 +286,6 @@ export async function resolveFullTrack(track: OnlineTrack, onProgress?: (percent
   }
 }
 
-export async function getQobuzStatus(): Promise<QobuzStatus> {
-  try {
-    return await window.electronAPI.onlineGetQobuz();
-  } catch {
-    return { email: '', hasPassword: false };
-  }
-}
-
-export async function connectQobuz(email: string, password: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    return await window.electronAPI.onlineSetQobuz({ email, password });
-  } catch (e: any) {
-    return { success: false, error: e.message };
-  }
-}
-
 export function resolveDownloadSource(track: OnlineTrack, quality: QualityOption): { url: string; ext: string; isFallback: boolean } {
   if (quality.available && track.previewUrl) {
     return { url: track.previewUrl, ext: quality.ext, isFallback: false };
@@ -267,26 +307,57 @@ export async function downloadOnlineTrack(
   });
   const safeTitle = `${track.artist} - ${track.title}`.replace(/[\\/:*?"<>|]/g, '_');
   const query = buildSearchQuery(track);
-  try {
-    if (quality.engine === 'flac') {
-      const q = await getQobuzStatus();
-      if (q.email && q.hasPassword) {
-        const native = await window.electronAPI.onlineQobuzDownload({ query, filename: safeTitle, downloadId });
-        if (native.success) {
-          cleanup();
-          return { success: true, path: native.path, isFallback: false, fallbackExt: 'flac' };
-        }
+
+  const tryExtension = async (): Promise<{ success: boolean; path?: string; error?: string; used?: boolean }> => {
+    if (!track.providerId || !track.providerTrackId) return { success: false, used: false };
+    const ext = (() => {
+      try {
+        return loadExtensions().find(e => e.id === track.extensionId);
+      } catch {
+        return undefined;
       }
+    })();
+    const qualityId = ext && ext.qualityOptions.length > 0
+      ? (ext.qualityOptions.find(q => !q.isPreview) || ext.qualityOptions[0]).id
+      : (quality.engine === 'flac' ? 'FLAC' : 'BEST');
+    const result = await window.electronAPI.extensionsDownload({
+      packageId: track.providerId,
+      trackId: track.providerTrackId,
+      qualityId,
+      meta: {
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        cover: track.cover,
+        releaseDate: track.releaseDate,
+      },
+      filename: safeTitle,
+      downloadId,
+    });
+    if (!result.success) return { success: false, error: result.error, used: true };
+    return { success: true, path: result.path, used: true };
+  };
+
+  try {
+    if (isRealExtensionTrack(track)) {
+      const extRes = await tryExtension();
+      cleanup();
+      if (extRes.used && extRes.success) return { success: true, path: extRes.path, isFallback: false };
+      if (extRes.used && extRes.error) {
+        console.warn(`[spatiflac] extension download failed, using built-in engine: ${extRes.error}`);
+      }
+    }
+    if (quality.engine === 'flac') {
       const result = await window.electronAPI.onlineDownloadTrack({ query, filename: safeTitle, format: 'flac', downloadId });
       cleanup();
-      if (result.success) return { success: true, path: result.path, isFallback: false, fallbackExt: 'flac' };
-      return { success: false, error: result.error, isFallback: false };
+      if (result.success) return { success: true, path: result.path, isFallback: true, fallbackExt: 'flac' };
+      return { success: false, error: result.error, isFallback: true };
     }
     if (quality.engine === 'full') {
       const result = await window.electronAPI.onlineDownloadTrack({ query, filename: safeTitle, format: 'best', downloadId });
       cleanup();
-      if (result.success) return { success: true, path: result.path, isFallback: false };
-      return { success: false, error: result.error, isFallback: false };
+      if (result.success) return { success: true, path: result.path, isFallback: true };
+      return { success: false, error: result.error, isFallback: true };
     }
     const source = resolveDownloadSource(track, quality);
     const result = await window.electronAPI.onlineDownload({ url: source.url, filename: `${safeTitle}.m4a`, downloadId });

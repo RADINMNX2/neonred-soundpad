@@ -11,6 +11,48 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.3.4",
+    date: "2026-08-15",
+    features: {
+      added: [
+        "Real Extension Runtime: The Extension Store is now fully functional — installed providers are executed live in a sandboxed engine and actually search their own catalogs (SoundCloud, Spotify Web, and more).",
+        "Verified Package Installation: Community extensions are downloaded from the registry, sha256-checked against the official checksum and extracted before activation — corrupted or tampered packages are refused.",
+        "Real Provider Downloads: SoundCloud and Spotify Web tracks are now fetched directly from their native services, then tagged with cover art, title, artist, album, year and ISRC via FFmpeg.",
+        "Automatic Fallback: If a provider's live source is unavailable, NeonRed silently falls back to the built-in full-track engine, so a download never dies.",
+        "Per-Provider Quality: Installed extensions expose their own real quality options (e.g. SoundCloud MP3) instead of generic buttons."
+      ],
+      fixed: [
+        "Installing an extension used to only register it in the UI — it now also stores the verified package on disk.",
+        "Removed a startup race that could prevent community extension packages from loading in the packaged app."
+      ]
+    }
+  },
+  {
+    version: "1.3.3",
+    date: "2026-08-14",
+    features: {
+      added: [
+        "Spatiflac Online Music: Search the global iTunes/Apple catalog right inside the Music Player and stream or download tracks.",
+        "Full-Track Playback: Press Play to load the complete track in the best available quality — no more 30-second clips.",
+        "Smart Caching: Full tracks are saved to disk on first play, so replaying them never re-downloads.",
+        "Online Queue: While an online track is playing, Next/Previous stay inside the online section instead of jumping into your local playlist.",
+        "True Lossless FLAC: Download real, uncompressed FLAC files — no account, no login, fully account-free.",
+        "30-Second Previews: Preview any track instantly in the track details without saving anything or touching your playlist.",
+        "Extension Store: Install community providers (Spotify Web, Qobuz, Tidal, Deezer, Amazon Music, SoundCloud, YouTube Music, Pandora, Apple Music) straight from the SpatiFLAC registry, or add your own registry URL.",
+        "Built-in Lossless Engine: Full tracks resolved via YouTube and FLAC converted losslessly with FFmpeg under the hood."
+      ],
+      fixed: [
+        "Online Play previously played only a 30-second preview and added it to your playlist — it now plays the full, cached track.",
+        "Skipping tracks while listening to online music used to fall back to the local playlist — it now follows the online list.",
+        "FLAC downloads previously required an account and silently fell back to preview quality — they are now real lossless files for everyone.",
+        "Fixed raw HTML entities in the Help modal rendering literally."
+      ],
+      removed: [
+        "Qobuz account flow (email/password) removed entirely — FLAC and full downloads now work with zero accounts."
+      ]
+    }
+  },
+  {
     version: "1.1.2",
     date: "2024-03-26",
     features: {

@@ -106,6 +106,8 @@ export function registryToExtension(reg: RegistryExtension, registryUrl: string)
     registryUrl,
     sha256: reg.sha256,
     minAppVersion: reg.min_app_version,
+    packageId: reg.id,
+    downloadUrl: reg.download_url,
   };
 }
 
@@ -173,4 +175,36 @@ export function getRegistryUrls(): string[] {
 
 export function saveRegistryUrls(urls: string[]) {
   localStorage.setItem(REGISTRY_URLS_KEY, JSON.stringify(urls));
+}
+
+export async function installExtensionPackage(ext: SpatiflacExtension): Promise<{ success: boolean; error?: string }> {
+  if (!ext.packageId || !ext.downloadUrl) return { success: false, error: 'Package metadata missing' };
+  try {
+    const result = await window.electronAPI.extensionsInstall({
+      packageId: ext.packageId,
+      download_url: ext.downloadUrl,
+      sha256: ext.sha256,
+    });
+    if (!result.success) return { success: false, error: result.error };
+    const installed = { ...ext };
+    if (result.extension?.qualityOptions && result.extension.qualityOptions.length > 0) {
+      installed.qualityOptions = result.extension.qualityOptions;
+    }
+    saveInstalledRegistryExtension(installed);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Install failed' };
+  }
+}
+
+export async function uninstallExtensionPackage(ext: SpatiflacExtension): Promise<{ success: boolean; error?: string }> {
+  removeInstalledRegistryExtension(ext.id);
+  if (ext.packageId && window.electronAPI?.extensionsUninstall) {
+    try {
+      await window.electronAPI.extensionsUninstall(ext.packageId);
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Uninstall failed' };
+    }
+  }
+  return { success: true };
 }

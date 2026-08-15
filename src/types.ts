@@ -48,11 +48,6 @@ export interface FullTrackResult {
   error?: string;
 }
 
-export interface QobuzStatus {
-  email: string;
-  hasPassword: boolean;
-}
-
 export interface SpatiflacExtension {
   id: string;
   name: string;
@@ -71,6 +66,8 @@ export interface SpatiflacExtension {
   registryUrl?: string;
   sha256?: string;
   minAppVersion?: string;
+  packageId?: string;
+  downloadUrl?: string;
 }
 
 export interface RegistryExtension {
@@ -110,6 +107,19 @@ export interface OnlineTrack {
   extensionName: string;
   extensionColor: string;
   extensionAccent: string;
+  providerId?: string;
+  providerTrackId?: string;
+}
+
+export interface InstalledExtensionInfo {
+  packageId: string;
+  name: string;
+  displayName: string;
+  version: string;
+  description: string;
+  types: string[];
+  qualityOptions: QualityOption[];
+  minAppVersion?: string;
 }
 
 export interface MiniPlayerState {
@@ -244,10 +254,12 @@ declare global {
       onlineFullTrack: (opts: { query: string; cacheKey?: string; downloadId?: string }) => Promise<FullTrackResult>;
       onlineDownloadTrack: (opts: { query: string; cacheKey?: string; filename?: string; format: 'best' | 'flac' | 'preview'; previewUrl?: string; downloadId?: string }) => Promise<{ success: boolean; path?: string; cached?: boolean; error?: string }>;
 
-      // Qobuz FLAC Provider
-      onlineSetQobuz: (opts: { email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
-      onlineGetQobuz: () => Promise<QobuzStatus>;
-      onlineQobuzDownload: (opts: { query: string; filename?: string; formatId?: number; downloadId?: string }) => Promise<{ success: boolean; path?: string; cached?: boolean; error?: string }>;
+      // Spatiflac Community Extension Runtime
+      extensionsInstalled: () => Promise<InstalledExtensionInfo[]>;
+      extensionsInstall: (reg: { packageId: string; download_url: string; sha256?: string }) => Promise<{ success: boolean; extension?: { packageId: string; displayName: string; version: string; description: string; types: string[]; qualityOptions: QualityOption[] }; error?: string }>;
+      extensionsUninstall: (packageId: string) => Promise<{ success: boolean; error?: string }>;
+      extensionsSearch: (opts: { packageId: string; query: string }) => Promise<{ success: boolean; results?: any[]; error?: string }>;
+      extensionsDownload: (opts: { packageId: string; trackId: string; qualityId?: string; meta?: { title?: string; artist?: string; album?: string; cover?: string; isrc?: string; releaseDate?: string }; filename?: string; downloadId?: string }) => Promise<{ success: boolean; path?: string; error?: string; metadata?: any }>;
     };
     jsmediatags?: any;
   }

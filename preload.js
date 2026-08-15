@@ -106,8 +106,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onlineFullTrack: (opts) => ipcRenderer.invoke('online-full-track', opts),
   onlineDownloadTrack: (opts) => ipcRenderer.invoke('online-download-track', opts),
 
-  // Qobuz FLAC Provider
-  onlineSetQobuz: (opts) => ipcRenderer.invoke('online-set-qobuz', opts),
-  onlineGetQobuz: () => ipcRenderer.invoke('online-get-qobuz'),
-  onlineQobuzDownload: (opts) => ipcRenderer.invoke('online-qobuz-download', opts)
+  // Spatiflac Community Extension Runtime
+  extensionsInstalled: () => ipcRenderer.invoke('extensions-installed'),
+  extensionsInstall: (reg) => ipcRenderer.invoke('extensions-install', reg),
+  extensionsUninstall: (packageId) => ipcRenderer.invoke('extensions-uninstall', packageId),
+  extensionsSearch: (opts) => ipcRenderer.invoke('extensions-search', opts),
+  extensionsDownload: (opts) => ipcRenderer.invoke('extensions-download', opts)
 });
