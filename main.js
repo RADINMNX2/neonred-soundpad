@@ -1,5 +1,5 @@
 
-const { app, BrowserWindow, ipcMain, globalShortcut, Tray, screen, dialog, Menu, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, Tray, screen, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -7,6 +7,7 @@ const https = require('https');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const sflxRuntime = require('./spatiflac-extension-runtime');
 
 // Configure Logging
 log.transports.file.level = 'info';
@@ -548,8 +549,8 @@ ipcMain.handle('online-download', async (event, opts) => {
 // ============================================================================
 // ONLINE MUSIC ENGINE (Spatiflac full-track + FLAC)
 // Full tracks are resolved through the YouTube full-track engine (ytdl-core +
-// yt-search) and cached locally. FLAC is produced either natively through a
-// connected Qobuz account or by lossless conversion with FFmpeg.
+// yt-search) and cached locally. FLAC is produced by lossless conversion with
+// FFmpeg — no account required.
 // ============================================================================
 
 let _ytdl = null;
@@ -559,7 +560,6 @@ function loadYtSearch() { if (!_ytsearch) _ytsearch = require('yt-search'); retu
 
 function onlineBaseDir() { return path.join(app.getPath('music'), 'NeonRed Spatiflac'); }
 function onlineCacheDir() { return path.join(onlineBaseDir(), '.cache'); }
-function qobuzCredsFile() { return path.join(app.getPath('userData'), 'spatiflac-qobuz.json'); }
 
 function makeProgressSender(event, downloadId) {
   return (fraction) => {
@@ -630,6 +630,167 @@ function downloadYoutubeFlac(videoId, format, destPath, onProgress) {
   });
 }
 
+function uniquePath(dir, filename) {
+  let destPath = path.join(dir, filename);
+  if (!fs.existsSync(destPath)) return destPath;
+  const ext = path.extname(filename);
+  const base = filename.slice(0, -ext.length);
+  let i = 1;
+  while (fs.existsSync(destPath)) {
+    destPath = path.join(dir, `${base} (${i})${ext}`);
+    i++;
+  }
+  return destPath;
+}
+
+function cleanupWorkDir(dir) {
+  if (!dir) return;
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {}
+}
+
+function embedAudioMetadata(inputPath, outputPath, meta) {
+  return new Promise((resolve, reject) => {
+    const ffmpegPath = ffmpegBinaryPath();
+    if (!ffmpegPath) return reject(new Error('FFmpeg binary not found'));
+    const args = ['-hide_banner', '-loglevel', 'error', '-y', '-i', inputPath];
+    const coverPath = meta && meta.coverPath && fs.existsSync(meta.coverPath) ? meta.coverPath : null;
+    if (coverPath) args.push('-i', coverPath);
+    args.push('-map', '0:a:0');
+    if (coverPath) {
+      args.push('-map', '1:v:0', '-c:v', 'mjpeg', '-disposition:v', 'attached_pic');
+    }
+    args.push('-c:a', 'copy', '-id3v2_version', '3');
+    const tags = (meta && meta.tags) || {};
+    Object.keys(tags).forEach((k) => {
+      const v = tags[k] == null ? '' : String(tags[k]).trim();
+      if (v) args.push('-metadata', `${k}=${v}`);
+    });
+    args.push(outputPath);
+    const ff = spawn(ffmpegPath, args, { windowsHide: true });
+    let stderr = '';
+    ff.stderr.on('data', (d) => { stderr += d.toString(); });
+    ff.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error('Metadata embedding failed: ' + stderr.slice(-200)));
+    });
+    ff.on('error', (err) => reject(err));
+  });
+}
+
+// ============================================================================
+// SPATIFLAC EXTENSION RUNTIME (community .sflx providers)
+// Extensions are ZIP packages (manifest.json + index.js) downloaded from the
+// SpatiFLAC registry, sha256-verified and executed in a sandboxed vm worker.
+// ============================================================================
+
+ipcMain.handle('extensions-installed', async () => sflxRuntime.listInstalled());
+
+ipcMain.handle('extensions-install', async (event, reg) => {
+  try {
+    const result = await sflxRuntime.installFromRegistry(reg || {});
+    if (!result.success) return { success: false, error: result.error };
+    const manifest = result.extension.manifest;
+    return {
+      success: true,
+      extension: {
+        packageId: result.extension.packageId,
+        displayName: manifest.displayName || manifest.name,
+        version: manifest.version,
+        description: manifest.description,
+        types: manifest.type || [],
+        qualityOptions: (manifest.qualityOptions || []).map((q) => ({
+          id: String(q.id || 'best'),
+          label: q.label || q.id || 'Quality',
+          description: q.description || '',
+          ext: q.id && String(q.id).toLowerCase().includes('flac') ? 'flac' : (q.ext || 'mp3'),
+          available: true,
+          engine: q.id && String(q.id).toLowerCase().includes('flac') ? 'flac' : 'full'
+        }))
+      }
+    };
+  } catch (error) {
+    return { success: false, error: error.message || 'Install failed' };
+  }
+});
+
+ipcMain.handle('extensions-uninstall', async (event, packageId) => sflxRuntime.uninstall(packageId));
+
+ipcMain.handle('extensions-search', async (event, opts) => {
+  try {
+    const { packageId, query } = opts || {};
+    if (!packageId || !query) return { success: false, error: 'Missing parameters' };
+    const res = await sflxRuntime.searchProvider(packageId, query);
+    if (!res.ok) return { success: false, error: res.error || 'Search failed' };
+    return { success: true, results: Array.isArray(res.result) ? res.result : [] };
+  } catch (error) {
+    return { success: false, error: error.message || 'Search failed' };
+  }
+});
+
+ipcMain.handle('extensions-download', async (event, opts) => {
+  const cleanup = () => {
+    if (res && res.workDir) cleanupWorkDir(res.workDir);
+  };
+  let res = null;
+  try {
+    const { packageId, trackId, qualityId, meta, filename, downloadId } = opts || {};
+    if (!packageId || !trackId) return { success: false, error: 'Missing extension or track id' };
+    const baseDir = onlineBaseDir();
+    await fs.promises.mkdir(baseDir, { recursive: true });
+    const sendProgress = makeProgressSender(event, downloadId || crypto.randomUUID());
+    res = await sflxRuntime.downloadProvider(packageId, trackId, qualityId, (p) => {
+      sendProgress(Math.max(0, Math.min(1, p)));
+    }, true);
+    if (!res.ok) {
+      cleanup();
+      return { success: false, error: res.error || 'Extension download failed' };
+    }
+    const result = res.result;
+    const srcPath = result && result.file_path;
+    if (!srcPath || !fs.existsSync(srcPath)) {
+      cleanup();
+      return { success: false, error: 'Downloaded file missing' };
+    }
+    const size = fs.statSync(srcPath).size;
+    if (size < 1024) {
+      cleanup();
+      return { success: false, error: 'Downloaded file too small' };
+    }
+    const ext = path.extname(srcPath) || '.mp3';
+    const finalName = `${sanitizeForFile(filename || (meta && meta.title) || 'track')}${ext}`;
+    const finalPath = uniquePath(baseDir, finalName);
+    let coverPath = null;
+    if (meta && meta.cover) {
+      coverPath = path.join(app.getPath('temp'), 'neonred-sflx', crypto.randomUUID() + '.jpg');
+      try { await downloadUrl(meta.cover, coverPath, () => {}); } catch (e) { coverPath = null; }
+    }
+    const tags = {
+      title: (result && result.title) || (meta && meta.title),
+      artist: (result && result.artist) || (meta && meta.artist),
+      album: (result && result.album) || (meta && meta.album),
+      album_artist: result && result.album_artist,
+      track: result && result.track_number ? String(result.track_number) : undefined,
+      date: (result && result.release_date) || (meta && meta.releaseDate),
+      ISRC: (result && result.isrc) || (meta && meta.isrc)
+    };
+    try {
+      await embedAudioMetadata(srcPath, finalPath, { tags, coverPath });
+    } catch (embedErr) {
+      try { fs.copyFileSync(srcPath, finalPath); } catch (copyErr) {
+        cleanup();
+        if (coverPath) try { fs.unlinkSync(coverPath); } catch (e) {}
+        return { success: false, error: embedErr.message || 'Metadata embedding failed' };
+      }
+    }
+    cleanup();
+    if (coverPath) try { fs.unlinkSync(coverPath); } catch (e) {}
+    return { success: true, path: finalPath, metadata: result };
+  } catch (error) {
+    cleanup();
+    return { success: false, error: error.message || 'Extension download failed' };
+  }
+});
+
 ipcMain.handle('online-full-track', async (event, opts) => {
   try {
     const { query, cacheKey } = opts || {};
@@ -684,91 +845,7 @@ ipcMain.handle('online-download-track', async (event, opts) => {
   }
 });
 
-// --- Qobuz FLAC provider ---
-const QOBUZ_APP_ID = '1252860423';
-const QOBUZ_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
-
-function qobuzHeaders(token) {
-  const h = { 'X-App-Id': QOBUZ_APP_ID, 'User-Agent': QOBUZ_UA };
-  if (token) h['X-User-Auth-Token'] = token;
-  return h;
-}
-
-async function qobuzLogin(email, password) {
-  const res = await fetch('https://www.qobuz.com/api.json/0.2/user/login', {
-    method: 'POST',
-    headers: { ...qobuzHeaders(''), 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}&app_id=${QOBUZ_APP_ID}`
-  });
-  const data = await res.json().catch(() => null);
-  if (!data || !data.user_auth_token) throw new Error('Qobuz login failed — check your credentials');
-  return data;
-}
-
-async function readQobuzCreds() {
-  try {
-    if (!fs.existsSync(qobuzCredsFile())) return null;
-    const buf = await fs.promises.readFile(qobuzCredsFile());
-    const str = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : buf.toString();
-    const data = JSON.parse(str);
-    if (data.email && data.password) return data;
-  } catch (e) {
-    log.error('Failed to read Qobuz credentials', e);
-  }
-  return null;
-}
-
-async function qobuzSearchTrack(query, token) {
-  const url = `https://www.qobuz.com/api.json/0.2/catalog/search?query=${encodeURIComponent(query)}&limit=5&type=tracks`;
-  const res = await fetch(url, { headers: qobuzHeaders(token) });
-  const data = await res.json().catch(() => null);
-  const track = data && data.tracks && data.tracks.items && data.tracks.items[0];
-  if (!track) throw new Error('Track not found on Qobuz');
-  return track;
-}
-
-ipcMain.handle('online-set-qobuz', async (event, { email, password }) => {
-  try {
-    if (!email || !password) return { success: false, error: 'Email and password are required' };
-    const payload = JSON.stringify({ email, password });
-    const buf = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(payload) : Buffer.from(payload);
-    await fs.promises.writeFile(qobuzCredsFile(), buf);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
-
-ipcMain.handle('online-get-qobuz', async () => {
-  const creds = await readQobuzCreds();
-  return { email: creds ? creds.email : '', hasPassword: !!(creds && creds.password) };
-});
-
-ipcMain.handle('online-qobuz-download', async (event, opts) => {
-  try {
-    const { query, filename, downloadId } = opts || {};
-    if (!query) return { success: false, error: 'Missing search query' };
-    const creds = await readQobuzCreds();
-    if (!creds) return { success: false, error: 'Qobuz account not connected' };
-    const session = await qobuzLogin(creds.email, creds.password);
-    const token = session.user_auth_token;
-    const track = await qobuzSearchTrack(query, token);
-    const formatId = (opts && opts.formatId) || 27; // 27 = FLAC 24-bit, 17 = FLAC 16-bit
-    const url = `https://www.qobuz.com/api.json/0.2/track/get?track_id=${track.id}&format_id=${formatId}`;
-    const res = await fetch(url, { headers: qobuzHeaders(token) });
-    const data = await res.json().catch(() => null);
-    if (!data || !data.url) return { success: false, error: 'This quality is not available on your Qobuz plan' };
-    const baseDir = onlineBaseDir();
-    await fs.promises.mkdir(baseDir, { recursive: true });
-    const destPath = path.join(baseDir, `${sanitizeForFile(filename || 'track')}.flac`);
-    if (fs.existsSync(destPath)) return { success: true, path: destPath, cached: true };
-    const sendProgress = makeProgressSender(event, downloadId || crypto.randomUUID());
-    await downloadUrl(data.url, destPath, sendProgress);
-    return { success: true, path: destPath };
-  } catch (error) {
-    return { success: false, error: error.message || 'Qobuz download failed' };
-  }
-});
+// --- Qobuz FLAC provider removed: FLAC is produced losslessly by FFmpeg with no account ---
 
 ipcMain.handle('install-vb-cable', async () => {
   try {

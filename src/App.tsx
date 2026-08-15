@@ -89,6 +89,11 @@ const AppContent: React.FC = () => {
     else localStorage.removeItem('stopKeybind');
   }, [monitorDeviceId, injectorDeviceId, micInputDeviceId, masterVolume, micVolume, micEqSettings, stopKeybind, isTrayMode, isMiniMode]);
 
+  const handleCloseHelp = () => {
+    setIsHelpOpen(false);
+    localStorage.setItem('hasSeenHelp', 'true');
+  };
+
   // --- DEVICE FETCHING ---
   const getDevices = async () => {
     setIsRefreshingDevices(true);
@@ -201,8 +206,14 @@ const AppContent: React.FC = () => {
           </main>
         </div>
 
-        {isLanguageModalOpen && <LanguageSelectorModal isOpen={isLanguageModalOpen} onSelect={(l) => { setLanguage(l); setIsLanguageModalOpen(false); setTimeout(() => setIsHelpOpen(true), 300); }} />}
-        {isHelpOpen && <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} micInputDeviceId={micInputDeviceId} injectorDeviceId={injectorDeviceId} monitorDeviceId={monitorDeviceId} inputDevices={inputDevices} outputDevices={outputDevices} onOpenSelector={setActiveDeviceSelector} />}
+        {isLanguageModalOpen && <LanguageSelectorModal isOpen={isLanguageModalOpen} onSelect={(l) => { 
+          setLanguage(l); 
+          setIsLanguageModalOpen(false); 
+          if (!localStorage.getItem('hasSeenHelp')) {
+            setTimeout(() => setIsHelpOpen(true), 300);
+          }
+        }} />}
+        {isHelpOpen && <HelpModal isOpen={isHelpOpen} onClose={handleCloseHelp} micInputDeviceId={micInputDeviceId} injectorDeviceId={injectorDeviceId} monitorDeviceId={monitorDeviceId} inputDevices={inputDevices} outputDevices={outputDevices} onOpenSelector={setActiveDeviceSelector} />}
         <UpdateModal isOpen={isUpdateModalOpen} onClose={() => setIsUpdateModalOpen(false)} updateInfo={updateInfo} progress={updateProgress} isDownloaded={updateDownloaded} onDownload={() => window.electronAPI.downloadUpdate()} onInstall={() => window.electronAPI.installUpdate()} />
         {isWhatsNewOpen && <WhatsNewModal isOpen={isWhatsNewOpen} onClose={() => setIsWhatsNewOpen(false)} />}
 
