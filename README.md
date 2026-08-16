@@ -17,7 +17,7 @@
 
 ### A high-performance, modern soundboard for Windows with mic injection and real-time EQ.
 
-[![Version](https://img.shields.io/badge/version-2.0.0-FF2D55.svg?style=flat-square)](https://github.com/RADINMNX2/neonred-soundpad/releases)
+[![Version](https://img.shields.io/badge/version-2.1.0-FF2D55.svg?style=flat-square)](https://github.com/RADINMNX2/neonred-soundpad/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6.svg?style=flat-square)](https://github.com/RADINMNX2/neonred-soundpad/releases)
 [![License](https://img.shields.io/badge/license-MIT-27ae60.svg?style=flat-square)](https://github.com/RADINMNX2/neonred-soundpad/blob/main/package.json)
 [![Electron](https://img.shields.io/badge/built%20with-Electron-47848F.svg?style=flat-square)](https://www.electronjs.org/)
