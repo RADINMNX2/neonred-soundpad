@@ -11,6 +11,35 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.0.0",
+    date: "2026-08-15",
+    features: {
+      added: [
+        "Settings Rebuilt: Extension management moved out of the page into a brand-new Extensions modal — two clean tabs (Extensions + Store), live active counts, responsive cards and a fresh pink-to-violet identity.",
+        "Studio-Grade 10-Band Mic EQ: Fully redesigned equalizer with an animated response-curve scan, floating dB readouts that follow the sliders, PEAK / AVG / Character stat chips, and click-to-reset frequency labels.",
+        "Cinematic Loading Screen: A new audio-pulse intro — live waveform bars, EQ ring, vinyl halo and boot status messages that lock in as the app loads.",
+        "Smarter Language Setup: The language picker is redesigned (glass cards, flags, recommendation chip) and now appears only once on first launch — never again.",
+        "Hardened Extension Engine: Providers now run on a verified request protocol with retries, timeouts, binary-safe responses, redirect handling and FLAC/MP3 output matched to the selected quality — no more hangs or CPU spin.",
+        "Resilient Online Music: Chart data is cached and falls back to a second catalog source when the primary one rate-limits, so Featured lists keep loading.",
+        "Open Files Directly: Double-clicking a music file in Windows opens it straight into the player.",
+        "Crash-Proof Shell: A new error boundary catches unexpected renderer errors and offers a clean reload instead of a silent freeze."
+      ],
+      fixed: [
+        "45 bugs resolved — including 8 critical issues across the audio engine, file system and update pipeline.",
+        "Microphone passthrough now shuts down cleanly when injection is off; mic streams no longer leak into the background.",
+        "Removed the Tailwind CDN from production builds — styles are compiled into the app, making startup faster and fully offline-safe.",
+        "The auto-updater no longer spams errors when the release channel has no file yet; update alerts only appear for real updates.",
+        "Fixed 'Requested device not found' when a saved microphone is unplugged — the app now falls back gracefully.",
+        "Fixed FLAC files being mislabeled as MP3; extension downloads now match the quality you pick.",
+        "The language modal no longer reappears on every launch — your choice was never being saved.",
+        "Album-art caching no longer overflows local storage; JSON parse crashes in settings, themes and EQ presets are gone."
+      ],
+      removed: [
+        "Injected runtime scripts (Tailwind CDN, remote import maps) — the app is now fully self-contained."
+      ]
+    }
+  },
+  {
     version: "1.3.4",
     date: "2026-08-15",
     features: {

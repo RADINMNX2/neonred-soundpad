@@ -1,1 +1,8 @@
 node_modules
+build
+dist
+public/source.zip
+*.log
+npm-debug.log*
+.env
+.DS_Store
