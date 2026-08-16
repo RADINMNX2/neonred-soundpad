@@ -65,7 +65,7 @@ const LyricsOverlay: React.FC<LyricsOverlayProps> = ({ lyricsRaw, currentTime, d
 
   const rawLines = useMemo(() => parseLrc(lyricsRaw), [lyricsRaw]);
   const mode = useMemo(() => detectMode(lyricsRaw), [lyricsRaw]);
-  const timed = mode === 'timed';
+  const timed = mode === 'timed' && rawLines.some((l) => l.time > 0);
   const lines = useMemo(() => rawLines.filter((l) => l.text.trim().length > 0), [rawLines]);
 
   const activeIndex = useMemo(() => (timed ? findActiveIndex(lines, currentTime) : -1), [timed, lines, currentTime]);

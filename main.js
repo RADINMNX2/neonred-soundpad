@@ -528,6 +528,83 @@ ipcMain.handle('save-sound-file', async (event, sourcePath) => {
   }
 });
 
+ipcMain.handle('read-lyrics-file', async (event, filePath) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') return { success: false, error: 'Invalid path' };
+    if (!fs.existsSync(filePath)) return { success: false, error: 'File not found' };
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile() || stat.size > 1024 * 1024) return { success: false, error: 'Invalid lyrics file' };
+    const text = await fs.promises.readFile(filePath, 'utf8');
+    return { success: true, content: text };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('read-embedded-lyrics', async (event, filePath) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') return { success: false, error: 'Invalid path' };
+    if (!fs.existsSync(filePath)) return { success: false, error: 'File not found' };
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile()) return { success: false, error: 'Not a file' };
+    const readSize = Math.min(stat.size, 8 * 1024 * 1024);
+    const buf = await fs.promises.readFile(filePath, { length: readSize });
+    const lyrics = extractFlacLyrics(buf);
+    if (lyrics) return { success: true, lyrics };
+    return { success: false, error: 'No embedded lyrics found' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+function extractFlacLyrics(buf) {
+  if (buf.length < 4) return null;
+  if (buf[0] !== 0x66 || buf[1] !== 0x4c || buf[2] !== 0x61 || buf[3] !== 0x43) return null;
+  let offset = 4;
+  while (offset + 4 <= buf.length) {
+    const header = buf[offset];
+    const isLast = (header & 0x80) !== 0;
+    const type = header & 0x7f;
+    const size = buf.readUIntBE(offset + 1, 3);
+    offset += 4;
+    if (offset + size > buf.length) break;
+    if (type === 4) {
+      return parseVorbisComments(buf, offset, size);
+    }
+    offset += size;
+    if (isLast) break;
+  }
+  return null;
+}
+
+function parseVorbisComments(buf, start, size) {
+  const end = start + size;
+  let p = start;
+  if (p + 4 > end) return null;
+  const vendorLen = buf.readUInt32LE(p);
+  p += 4 + vendorLen;
+  if (p + 4 > end) return null;
+  const count = buf.readUInt32LE(p);
+  p += 4;
+  for (let i = 0; i < count && p + 4 <= end; i++) {
+    const len = buf.readUInt32LE(p);
+    p += 4;
+    if (p + len > end) break;
+    const keyEnd = buf.indexOf(0x3d, p);
+    if (keyEnd === -1 || keyEnd > p + len) {
+      p += len;
+      continue;
+    }
+    const key = buf.toString('latin1', p, keyEnd).toUpperCase();
+    if (key === 'LYRICS' || key === 'UNSYNCEDLYRICS') {
+      const value = buf.toString('utf8', keyEnd + 1, p + len);
+      if (value && value.trim()) return value;
+    }
+    p += len;
+  }
+  return null;
+}
+
 ipcMain.handle('delete-sound-file', async (event, filePath) => {
   try {
     if (!filePath) return { success: false };

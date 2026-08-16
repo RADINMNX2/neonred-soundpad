@@ -234,6 +234,8 @@ declare global {
       setStartAtLogin: (enabled: boolean) => void;
       installVBCable: () => Promise<{ success: boolean; error?: string }>;
       saveSourceCode: () => Promise<{ success: boolean; error?: string; cancelled?: boolean }>;
+      readLyricsFile: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+      readEmbeddedLyrics: (path: string) => Promise<{ success: boolean; lyrics?: string; error?: string }>;
       
       // File Open
       onFileOpened: (callback: (path: string) => void) => () => void;

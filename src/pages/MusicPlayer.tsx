@@ -306,18 +306,28 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     if (track.path && !track.onlineId) {
       setLyricsRaw('');
       setLyricsLoading(true);
-      fetch(`file://${buildLrcPath(track.path).replace(/\\/g, '/')}`)
-        .then((res) => (res.ok ? res.text() : Promise.reject(new Error('no lrc'))))
+      const lrcPath = buildLrcPath(track.path);
+      const loadLyrics = async (): Promise<string> => {
+        try {
+          if (window.electronAPI?.readEmbeddedLyrics) {
+            const res = await window.electronAPI.readEmbeddedLyrics(track.path);
+            if (res.success && res.lyrics) return res.lyrics;
+          }
+          if (window.electronAPI?.readLyricsFile) {
+            const res = await window.electronAPI.readLyricsFile(lrcPath);
+            if (res.success && res.content) return res.content;
+          }
+        } catch (e) {
+          console.error('Lyrics load failed', e);
+        }
+        return '';
+      };
+      loadLyrics()
         .then((text) => {
           if (lyricsTrackIdRef.current !== track.id) return;
           lyricsCacheRef.current.set(track.id, text);
           setLyricsRaw(text);
-          setPlaylist((prev) => prev.map((tr) => (tr.id === track.id ? { ...tr, lyrics: text } : tr)));
-        })
-        .catch(() => {
-          if (lyricsTrackIdRef.current !== track.id) return;
-          lyricsCacheRef.current.set(track.id, '');
-          setLyricsRaw('');
+          if (text) setPlaylist((prev) => prev.map((tr) => (tr.id === track.id ? { ...tr, lyrics: text } : tr)));
         })
         .finally(() => {
           if (lyricsTrackIdRef.current === track.id) setLyricsLoading(false);

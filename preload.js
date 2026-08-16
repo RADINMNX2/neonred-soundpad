@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSoundFile: (path) => ipcRenderer.invoke('save-sound-file', path),
   deleteSoundFile: (path) => ipcRenderer.invoke('delete-sound-file', path),
   saveSourceCode: () => ipcRenderer.invoke('save-source-code'),
+  readLyricsFile: (path) => ipcRenderer.invoke('read-lyrics-file', path),
+  readEmbeddedLyrics: (path) => ipcRenderer.invoke('read-embedded-lyrics', path),
   
   // Installer
   installVBCable: () => ipcRenderer.invoke('install-vb-cable'),
