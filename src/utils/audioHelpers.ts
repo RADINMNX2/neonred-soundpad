@@ -117,7 +117,7 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-export const parseAudioMetadata = (file: Blob): Promise<{ title?: string, artist?: string, album?: string, cover?: string }> => {
+export const parseAudioMetadata = (file: Blob): Promise<{ title?: string, artist?: string, album?: string, cover?: string, lyrics?: string }> => {
   return new Promise((resolve) => {
     if (!window.jsmediatags) {
         resolve({});
@@ -126,7 +126,7 @@ export const parseAudioMetadata = (file: Blob): Promise<{ title?: string, artist
 
     window.jsmediatags.read(file, {
         onSuccess: (tag: any) => {
-            const { title, artist, album, picture } = tag.tags;
+            const { title, artist, album, picture, lyrics } = tag.tags;
             let cover = undefined;
             
             if (picture) {
@@ -140,7 +140,7 @@ export const parseAudioMetadata = (file: Blob): Promise<{ title?: string, artist
                     console.error("Error parsing cover", e);
                 }
             }
-            resolve({ title, artist, album, cover });
+            resolve({ title, artist, album, cover, lyrics: lyrics && typeof lyrics === 'string' ? lyrics : undefined });
         },
         onError: () => {
             resolve({});

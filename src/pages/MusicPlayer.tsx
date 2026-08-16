@@ -2,17 +2,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, 
-  ListMusic, Music, Volume2, Trash2, Plus, Disc, Clock, Sliders, Check, X, MousePointer2, Settings, BarChart2, Shrink, Globe
+  ListMusic, Music, Volume2, Trash2, Plus, Disc, Clock, Sliders, Check, X, MousePointer2, Settings, BarChart2, Shrink, Globe, FileText
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { MusicTrack, ExtendedAudioElement, VisualizerConfig, SpatiflacExtension, OnlineTrack, QualityOption } from '../types';
 import { fileToBase64, extractAlbumArt, getDominantColor, parseAudioMetadata } from '../utils/audioHelpers';
+import { buildLrcPath } from '../utils/lyrics';
 import RealTimeVisualizer from '../components/RealTimeVisualizer';
 import EqualizerModal from '../components/EqualizerModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import MusicDetailsModal from '../components/MusicDetailsModal';
 import PlayerSettingsModal from '../components/PlayerSettingsModal';
 import OnlineMusicPanel from '../components/OnlineMusicPanel';
+import LyricsOverlay from '../components/LyricsOverlay';
 import { loadExtensions, downloadOnlineTrack, resolveFullTrack, EXTENSIONS_CHANGED_EVENT } from '../utils/spatiflac';
 
 interface MusicPlayerProps {
@@ -74,7 +76,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   });
 
   // Persist Settings
-  useEffect(() => { localStorage.setItem('music_playlist', JSON.stringify(playlist)); }, [playlist]);
+  useEffect(() => { localStorage.setItem('music_playlist', JSON.stringify(playlist.map(({ lyrics, ...rest }) => rest))); }, [playlist]);
   useEffect(() => { localStorage.setItem('visualizer_studio_config', JSON.stringify(visualizerConfig)); }, [visualizerConfig]);
 
   // Selection Mode State
@@ -272,6 +274,72 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setAdaptiveColor('#ef4444');
     }
   }, [currentTrack]);
+
+  // --- LYRICS (embedded USLT + sidecar .lrc) ---
+  const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [lyricsEverOpen, setLyricsEverOpen] = useState(false);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [lyricsRaw, setLyricsRaw] = useState('');
+  const lyricsCacheRef = useRef<Map<string, string>>(new Map());
+  const lyricsTrackIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const track = currentTrack;
+    if (!track) {
+      setLyricsRaw('');
+      setLyricsLoading(false);
+      return;
+    }
+    lyricsTrackIdRef.current = track.id;
+    const cached = lyricsCacheRef.current.get(track.id);
+    if (cached !== undefined) {
+      setLyricsRaw(cached);
+      setLyricsLoading(false);
+      return;
+    }
+    if (track.lyrics) {
+      lyricsCacheRef.current.set(track.id, track.lyrics);
+      setLyricsRaw(track.lyrics);
+      setLyricsLoading(false);
+      return;
+    }
+    if (track.path && !track.onlineId) {
+      setLyricsRaw('');
+      setLyricsLoading(true);
+      fetch(`file://${buildLrcPath(track.path).replace(/\\/g, '/')}`)
+        .then((res) => (res.ok ? res.text() : Promise.reject(new Error('no lrc'))))
+        .then((text) => {
+          if (lyricsTrackIdRef.current !== track.id) return;
+          lyricsCacheRef.current.set(track.id, text);
+          setLyricsRaw(text);
+          setPlaylist((prev) => prev.map((tr) => (tr.id === track.id ? { ...tr, lyrics: text } : tr)));
+        })
+        .catch(() => {
+          if (lyricsTrackIdRef.current !== track.id) return;
+          lyricsCacheRef.current.set(track.id, '');
+          setLyricsRaw('');
+        })
+        .finally(() => {
+          if (lyricsTrackIdRef.current === track.id) setLyricsLoading(false);
+        });
+    } else {
+      lyricsCacheRef.current.set(track.id, '');
+      setLyricsRaw('');
+      setLyricsLoading(false);
+    }
+  }, [currentTrack]);
+
+  const toggleLyrics = useCallback(() => {
+    setLyricsOpen((prev) => {
+      const next = !prev;
+      if (next) setLyricsEverOpen(true);
+      return next;
+    });
+  }, []);
+
+  const handleLyricsSeek = useCallback((time: number) => {
+    if (audioElementRef.current) audioElementRef.current.currentTime = time;
+  }, []);
 
   // --- SYNC WITH TRAY ---
   // Send state update whenever critical properties change
@@ -613,6 +681,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         <div className="lg:w-1/3 flex flex-col gap-6">
             <div className="relative aspect-square w-full rounded-3xl overflow-hidden bg-zinc-900 border border-white/5 shadow-2xl shadow-black/50 group">
                 <div className="absolute top-4 left-4 z-30 flex gap-2">
+                    {(lyricsLoading || lyricsRaw.length > 0) && (
+                        <button onClick={toggleLyrics} className={`p-2 backdrop-blur-md rounded-full border border-white/10 transition-all ${lyricsOpen ? 'bg-red-500/80 text-white' : 'bg-black/40 text-white/70 hover:text-white hover:bg-black/60'}`} title={t('lyrics')}><FileText size={18} /></button>
+                    )}
                     <button onClick={() => setIsEqOpen(true)} className="p-2 bg-black/40 backdrop-blur-md rounded-full text-white/70 hover:text-white hover:bg-black/60 transition-all border border-white/10" title={t('equalizer')}><Sliders size={18} /></button>
                     <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-black/40 backdrop-blur-md rounded-full text-white/70 hover:text-white hover:bg-black/60 transition-all border border-white/10" title="Visualizer Settings"><Settings size={18} /></button>
                 </div>
@@ -646,6 +717,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                             onSync={handleVisualizerSync}
                         />
                     </div>
+                )}
+
+                {(lyricsEverOpen && (lyricsLoading || lyricsRaw.length > 0)) && (
+                    <>
+                        {currentTrack?.cover && (
+                            <img src={currentTrack.cover} alt="" aria-hidden className={`absolute inset-0 w-full h-full object-cover blur-2xl brightness-[.5] saturate-150 scale-110 pointer-events-none transition-opacity duration-700 ${lyricsOpen ? 'opacity-100' : 'opacity-0'}`} />
+                        )}
+                        <div className={`absolute inset-0 bg-black/45 backdrop-blur-md transition-opacity duration-500 ${lyricsOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}></div>
+                        <div className={`absolute inset-0 transition-opacity duration-500 ${lyricsOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                            <LyricsOverlay
+                                lyricsRaw={lyricsRaw}
+                                currentTime={currentTime}
+                                duration={duration}
+                                isPlaying={isPlaying}
+                                onSeek={handleLyricsSeek}
+                                loading={lyricsLoading}
+                            />
+                        </div>
+                    </>
                 )}
             </div>
 

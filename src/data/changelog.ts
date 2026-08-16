@@ -11,6 +11,24 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.1.0",
+    date: "2026-08-16",
+    features: {
+      added: [
+        "Lyrics & Subtitles: Synchronized lyrics overlay in the Music Player with a blurred-art stage, glowing active-line highlight, progress underline and click-to-seek on any line.",
+        "Mini Player Lyrics: The compact player gets the same synced lyrics experience — open the overlay right from the album art.",
+        "Sidecar .lrc Support: Drop a .lrc file next to your audio file and NeonRed loads it automatically; embedded USLT lyrics are read too.",
+        "Visualizer 2.0: A brand-new neon core — mirrored rounded bars with glow caps and peak dots, reflections, smart frequency mapping, buttery physics and smoother peaks.",
+        "Crisper Rendering: The visualizer now renders at full display resolution and adapts to any size, with a 60fps data pipeline that keeps the Mini Player light."
+      ],
+      fixed: [
+        "The visualizer no longer tears down its animation loop when the player window is minimized.",
+        "Mini Player no longer re-renders its whole UI 60 times per second while visualizer data streams in.",
+        "Bars now fade out gracefully (no more frozen spikes) when playback pauses or the window goes to background."
+      ]
+    }
+  },
+  {
     version: "2.0.0",
     date: "2026-08-15",
     features: {

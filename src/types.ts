@@ -24,6 +24,7 @@ export interface MusicTrack {
   duration: number;
   cover?: string;
   onlineId?: string;
+  lyrics?: string;
 }
 
 // --- Spatiflac / Online Music ---

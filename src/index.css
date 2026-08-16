@@ -219,6 +219,62 @@ body {
   100% { opacity: 0; }
 }
 
+/* Lyrics Keyframes */
+@keyframes lyric-shimmer {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+@keyframes lyric-glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.25)); }
+  50% { filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.6)); }
+}
+.lyric-line-active {
+  opacity: 1;
+  transform: scale(1.05);
+  color: transparent;
+  background-image: linear-gradient(90deg, #f43f5e, #fb7185, #ef4444);
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: lyric-glow-pulse 3.2s ease-in-out infinite;
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.lyric-line-past {
+  opacity: 0.35;
+  color: #a1a1aa;
+  transform: scale(0.97);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.lyric-line-future {
+  opacity: 0.25;
+  color: #e4e4e7;
+  transform: scale(0.95);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.lyric-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -8px;
+  height: 2px;
+  border-radius: 9999px;
+  transform-origin: left center;
+  transform: scaleX(var(--lyric-progress, 0));
+  background: linear-gradient(90deg, #f43f5e, #fb7185, #ef4444);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.8);
+  transition: transform 0.12s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lyric-line-active,
+  .lyric-line-past,
+  .lyric-line-future {
+    transition: none;
+  }
+  .lyric-line-active {
+    animation: none;
+  }
+}
+
 /* Mic EQ Studio Modal Keyframes */
 @keyframes eq-scan {
   0% { transform: translateX(-130%); opacity: 0; }

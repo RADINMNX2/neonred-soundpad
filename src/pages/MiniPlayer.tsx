@@ -1,8 +1,9 @@
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Maximize2, X, Play, Pause, SkipForward, SkipBack, Disc, Music } from 'lucide-react';
+import { Maximize2, X, Play, Pause, SkipForward, SkipBack, Music, FileText } from 'lucide-react';
 import { MiniPlayerState } from '../types';
 import RealTimeVisualizer from '../components/RealTimeVisualizer';
+import LyricsOverlay from '../components/LyricsOverlay';
 import { getDominantColor } from '../utils/audioHelpers';
 
 const MiniPlayer: React.FC = () => {
@@ -10,8 +11,10 @@ const MiniPlayer: React.FC = () => {
   const [dragTime, setDragTime] = useState(0);
   const [adaptiveColor, setAdaptiveColor] = useState<string>('#ef4444');
   
-  // Store visualizer data from main window
-  const [visData, setVisData] = useState<Uint8Array | null>(null);
+  // Store visualizer data from main window in a ref to avoid 60fps re-renders
+  const visDataRef = useRef<Uint8Array | null>(null);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [lyricsEverOpen, setLyricsEverOpen] = useState(false);
   
   // Use ref for dragging state to avoid effect re-runs
   const isDraggingRef = useRef(false);
@@ -39,7 +42,7 @@ const MiniPlayer: React.FC = () => {
 
         // Listen for visualizer data sync
         const cleanupVis = window.electronAPI.onVisualizerData((data) => {
-            setVisData(data);
+            visDataRef.current = data;
         });
 
         return () => {
@@ -90,6 +93,18 @@ const MiniPlayer: React.FC = () => {
       isDraggingRef.current = true;
       setDragTime(musicState.currentTime);
       dragTimeRef.current = musicState.currentTime;
+  };
+
+  const toggleLyrics = () => {
+      setLyricsOpen(prev => {
+          const next = !prev;
+          if (next) setLyricsEverOpen(true);
+          return next;
+      });
+  };
+
+  const handleLyricsSeek = (time: number) => {
+      window.electronAPI?.seekMusic(time);
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,13 +175,42 @@ const MiniPlayer: React.FC = () => {
                         </div>
                     )}
 
+                    {/* Lyrics Toggle Button */}
+                    {track?.lyrics && (
+                        <button 
+                            onClick={toggleLyrics}
+                            className={`absolute top-2 left-2 z-40 p-1.5 rounded-full backdrop-blur-md border border-white/10 transition-all ${lyricsOpen ? 'bg-red-500/80 text-white' : 'bg-black/40 text-white/70 hover:text-white hover:bg-black/60'}`}
+                            title="Lyrics"
+                        >
+                            <FileText size={14} />
+                        </button>
+                    )}
+
+                    {/* Lyrics Overlay */}
+                    {lyricsEverOpen && track?.lyrics && (
+                        <>
+                            {track.cover && <img src={track.cover} alt="" aria-hidden className={`absolute inset-0 z-20 w-full h-full object-cover blur-2xl brightness-[.5] saturate-150 scale-110 pointer-events-none transition-opacity duration-500 ${lyricsOpen ? 'opacity-100' : 'opacity-0'}`} />}
+                            <div className={`absolute inset-0 z-20 bg-black/45 backdrop-blur-md pointer-events-none transition-opacity duration-300 ${lyricsOpen ? 'opacity-100' : 'opacity-0'}`}></div>
+                            <div className={`absolute inset-0 transition-opacity duration-300 ${lyricsOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                                <LyricsOverlay
+                                    lyricsRaw={track.lyrics}
+                                    currentTime={musicState.currentTime}
+                                    duration={musicState.duration}
+                                    isPlaying={isPlaying}
+                                    onSeek={handleLyricsSeek}
+                                    compact
+                                />
+                            </div>
+                        </>
+                    )}
+
                     {/* Visualizer Overlay */}
                     <div className="absolute bottom-0 left-0 right-0 h-1/2 flex items-end justify-center px-4 pb-0 opacity-90 pointer-events-none mix-blend-screen">
                         <RealTimeVisualizer 
                             analyser={null} 
                             isPlaying={isPlaying} 
                             color={adaptiveColor} 
-                            externalData={visData} // Use synced data from main window
+                            externalDataRef={visDataRef} // Use synced data from main window via ref (no 60fps re-renders)
                             config={{
                                 isEnabled: true,
                                 height: 0.8,

@@ -29,6 +29,7 @@ export const translations = {
     unknownArtist: "Unknown Artist",
     unknownTitle: "Unknown Title",
     equalizer: "Equalizer",
+    lyrics: "Lyrics",
     eqProfiles: "Profiles",
     saveProfile: "Save Profile",
 
@@ -276,6 +277,7 @@ export const translations = {
     unknownArtist: "خواننده ناشناس",
     unknownTitle: "بدون عنوان",
     equalizer: "اکولایزر",
+    lyrics: "متن آهنگ",
     eqProfiles: "پروفایل‌ها",
     saveProfile: "ذخیره پروفایل",
 
