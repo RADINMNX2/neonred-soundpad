@@ -245,6 +245,9 @@ export const translations = {
     welcomeDesc: "Complete Setup Guide (5 Steps)",
     whySetup: "Why do I need setup?",
     whySetupDesc: "To inject audio into games without losing mic quality, we use a bridge called a Virtual Cable.",
+    endTour: "End Tour",
+    clickToContinue: "Click to continue",
+    skipTour: "Skip Tour",
   },
   fa: {
     // Sidebar
@@ -489,5 +492,8 @@ export const translations = {
     welcomeDesc: "راهنمای کامل راه‌اندازی (۵ مرحله)",
     whySetup: "داستان چیه؟",
     whySetupDesc: "برای اینکه هم صدای خودت بره هم صدای آهنگ‌ها بدون افت کیفیت، ما از یک کابل مجازی استفاده می‌کنیم.",
+    endTour: "پایان تور",
+    clickToContinue: "برای ادامه کلیک کنید",
+    skipTour: "رد شدن از تور",
   }
 };

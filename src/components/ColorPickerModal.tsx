@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check, Pipette } from 'lucide-react';
+import { isValidHexColor } from '../utils/colorUtils';
 
 interface ColorPickerModalProps {
   isOpen: boolean;
@@ -100,6 +101,14 @@ const ColorPickerModal: React.FC<ColorPickerModalProps> = ({ isOpen, onClose, cu
 
   if (!isOpen) return null;
 
+  const validHex = isValidHexColor(hex) ? hex : currentColor;
+
+  const handleApply = () => {
+    if (!isValidHexColor(hex)) return;
+    onSelect(hex);
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" onMouseUp={handleCanvasMouseUp}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fade-in" onClick={onClose}></div>
@@ -130,14 +139,14 @@ const ColorPickerModal: React.FC<ColorPickerModalProps> = ({ isOpen, onClose, cu
                 `
              }}
           >
-             <div 
+<div 
                 className="absolute w-4 h-4 rounded-full border-2 border-white shadow-md -translate-x-1/2 -translate-y-1/2 pointer-events-none"
                 style={{ 
                    left: `${saturation}%`, 
                    top: `${100 - brightness}%`,
-                   backgroundColor: hex
+                   backgroundColor: validHex
                 }}
-             ></div>
+              ></div>
           </div>
 
           {/* Hue Slider */}
@@ -169,10 +178,10 @@ const ColorPickerModal: React.FC<ColorPickerModalProps> = ({ isOpen, onClose, cu
                    maxLength={6}
                 />
              </div>
-             <div 
+<div 
                 className="w-12 h-12 rounded-xl border border-white/10 shadow-lg"
-                style={{ backgroundColor: hex }}
-             ></div>
+                style={{ backgroundColor: validHex }}
+              ></div>
           </div>
 
           {/* Presets */}
@@ -200,7 +209,7 @@ const ColorPickerModal: React.FC<ColorPickerModalProps> = ({ isOpen, onClose, cu
                 CANCEL
             </button>
             <button 
-                onClick={() => { onSelect(hex); onClose(); }}
+                onClick={handleApply}
                 className="flex-[2] py-3 bg-white text-black font-black rounded-2xl hover:bg-gray-100 transition-all active:scale-95 shadow-xl"
             >
                 APPLY COLOR

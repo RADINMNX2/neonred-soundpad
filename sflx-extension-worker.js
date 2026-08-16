@@ -5,7 +5,7 @@ const vm = require('vm');
 const crypto = require('crypto');
 const { URL } = require('url');
 
-const { extensionDir, callType, args, appVersion } = workerData;
+const { extensionDir, callType, args, appVersion, httpTimeoutMs } = workerData;
 
 const ctrl = new Int32Array(workerData.ctrlSab);
 const reqSab = workerData.reqSab;
@@ -16,37 +16,58 @@ const STATE_REQUEST = 1;
 const STATE_RESPONSE = 2;
 const STATE_CANCEL = 3;
 
+let _reqSeq = 0;
+
 function syncRequest(method, url, headers, body, destPath) {
   const flags = destPath ? 1 : 0;
   const payload = JSON.stringify({ method, url, headers: headers || {}, body: body || '', destPath, flags });
   const buf = Buffer.from(payload, 'utf8');
   const maxReq = reqSab.byteLength;
   if (buf.length > maxReq) throw new Error('Request payload too large');
-  new Uint8Array(reqSab, 0, buf.length).set(buf);
-  Atomics.store(ctrl, 2, buf.length);
-  Atomics.store(ctrl, 5, flags);
-  Atomics.store(ctrl, 0, Atomics.load(ctrl, 0) + 1);
-  Atomics.store(ctrl, 1, STATE_REQUEST);
-  Atomics.notify(ctrl, 1);
-  const waitRes = Atomics.wait(ctrl, 1, STATE_REQUEST, 120000);
-  if (waitRes === 'timed-out') {
-    Atomics.store(ctrl, 1, STATE_CANCEL);
+  const myId = ++_reqSeq;
+  const timeoutMs = destPath ? 320000 : (httpTimeoutMs || 60000);
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      Atomics.store(ctrl, 1, STATE_CANCEL);
+      Atomics.notify(ctrl, 1);
+      throw new Error('HTTP request timed out');
+    }
+    new Uint8Array(reqSab, 0, buf.length).set(buf);
+    Atomics.store(ctrl, 2, buf.length);
+    Atomics.store(ctrl, 5, flags);
+    Atomics.store(ctrl, 0, Atomics.load(ctrl, 0) + 1);
+    Atomics.store(ctrl, 7, myId);
+    Atomics.store(ctrl, 1, STATE_REQUEST);
     Atomics.notify(ctrl, 1);
-    throw new Error('HTTP request timed out');
+
+    Atomics.wait(ctrl, 1, STATE_REQUEST, Math.min(remaining, 5000));
+    const state = Atomics.load(ctrl, 1);
+    const echoId = Atomics.load(ctrl, 7);
+    if (state !== STATE_REQUEST && echoId === myId) {
+      const respLen = Atomics.load(ctrl, 3);
+      const respFlags = Atomics.load(ctrl, 5);
+      let raw = '';
+      try {
+        raw = Buffer.from(new Uint8Array(respSab, 0, respLen)).toString('utf8');
+      } catch (e) {
+        raw = '';
+      }
+      if (Atomics.load(ctrl, 7) === myId) {
+        Atomics.store(ctrl, 1, STATE_IDLE);
+        let resp = null;
+        try { resp = JSON.parse(raw); } catch (e) { resp = null; }
+        if (respFlags & 2) throw new Error('HTTP response too large');
+        if (!resp) throw new Error('Invalid HTTP response');
+        return resp;
+      }
+      continue;
+    }
+    if (state !== STATE_REQUEST && state !== STATE_CANCEL && state !== STATE_IDLE) {
+      Atomics.wait(ctrl, 1, state, Math.min(remaining, 5000));
+    }
   }
-  const respLen = Atomics.load(ctrl, 3);
-  const respFlags = Atomics.load(ctrl, 5);
-  let raw = '';
-  try {
-    raw = Buffer.from(new Uint8Array(respSab, 0, respLen)).toString('utf8');
-  } catch (e) {
-    raw = '';
-  }
-  Atomics.store(ctrl, 1, STATE_IDLE);
-  let resp = null;
-  try { resp = JSON.parse(raw); } catch (e) { resp = null; }
-  if (!resp && (respFlags & 2)) throw new Error('HTTP response too large');
-  return resp;
 }
 
 const USER_AGENTS = [
@@ -116,6 +137,8 @@ function b64decode(str) {
 
 const storagePath = path.join(extensionDir, 'storage.json');
 
+let _storageChain = Promise.resolve();
+
 function storageGet(key) {
   try {
     const raw = fs.readFileSync(storagePath, 'utf8');
@@ -127,14 +150,17 @@ function storageGet(key) {
 }
 
 function storageSet(key, value) {
-  try {
-    let data = {};
-    try { data = JSON.parse(fs.readFileSync(storagePath, 'utf8')); } catch (e) {}
-    data[key] = value;
-    const tmp = storagePath + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(data));
-    fs.renameSync(tmp, storagePath);
-  } catch (e) {}
+  _storageChain = _storageChain.then(() => {
+    try {
+      let data = {};
+      try { data = JSON.parse(fs.readFileSync(storagePath, 'utf8')); } catch (e) {}
+      data[key] = value;
+      const tmp = storagePath + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(data));
+      fs.renameSync(tmp, storagePath);
+    } catch (e) {}
+  });
+  return _storageChain;
 }
 
 function readManifest() {
@@ -277,7 +303,7 @@ function safeJson(value) {
   }
 }
 
-function main() {
+async function main() {
   try {
     const codePath = path.join(extensionDir, 'index.js');
     if (!fs.existsSync(codePath)) throw new Error('index.js missing in extension package');
@@ -297,17 +323,20 @@ function main() {
     if (callType === 'download') {
       const trackId = args[0];
       const quality = args[1];
-      const outputPath = path.join(workerData.workDir, 'output.mp3');
-      result = method.call(ext, trackId, quality, outputPath, (p) => {
+      const qualityStr = String(quality || '');
+      const extName = qualityStr.toLowerCase().includes('flac') ? 'flac' : 'mp3';
+      const outputPath = path.join(workerData.workDir, 'output.' + extName);
+      result = await method.call(ext, trackId, quality, outputPath, (p) => {
         try { parentPort.postMessage({ requestId: workerData.requestId, progress: p }); } catch (e) {}
       });
     } else {
-      result = method.apply(ext, args);
+      result = await method.apply(ext, args);
     }
+    await _storageChain.catch(() => {});
     return postResult({ ok: true, result: safeJson(result) });
   } catch (e) {
     return postResult({ ok: false, error: e && e.message ? e.message : String(e) });
   }
 }
 
-main();
+main().catch((e) => postResult({ ok: false, error: e && e.message ? e.message : String(e) }));

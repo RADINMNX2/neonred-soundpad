@@ -27,6 +27,8 @@ const DEFAULT_PROFILES: EQProfile[] = [
   { id: 'rock', name: 'Rock', gains: [4, 3, 1, -2, -4, -2, 1, 3, 4, 5] },
 ];
 
+export const DEFAULT_PROFILE_IDS: string[] = DEFAULT_PROFILES.map(p => p.id);
+
 const EqualizerModal: React.FC<EqualizerModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -36,8 +38,12 @@ const EqualizerModal: React.FC<EqualizerModalProps> = ({
 }) => {
   const { t, isRTL } = useLanguage();
   const [profiles, setProfiles] = useState<EQProfile[]>(() => {
-      const saved = localStorage.getItem('eq_profiles');
-      return saved ? JSON.parse(saved) : DEFAULT_PROFILES;
+      try {
+        const saved = localStorage.getItem('eq_profiles');
+        return saved ? JSON.parse(saved) : DEFAULT_PROFILES;
+      } catch {
+        return DEFAULT_PROFILES;
+      }
   });
   const [newProfileName, setNewProfileName] = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
@@ -64,6 +70,7 @@ const EqualizerModal: React.FC<EqualizerModalProps> = ({
   };
 
   const handleDeleteProfile = (id: string) => {
+      if (DEFAULT_PROFILE_IDS.includes(id)) return;
       setProfiles(prev => prev.filter(p => p.id !== id));
   };
 

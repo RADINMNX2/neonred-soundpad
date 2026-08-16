@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, Component } from 'react';
 // Sidebar import removed
 import SoundPad from './pages/SoundPad';
 import Settings from './pages/Settings';
@@ -26,15 +26,25 @@ const AppContent: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>(Page.PAD);
-  const [incomingMusicFile, setIncomingMusicFile] = useState<string | undefined>(undefined);
+  const [incomingMusicFile, setIncomingMusicFile] = useState<{ path: string; id: number } | undefined>(undefined);
   
   const { setLanguage } = useLanguage();
   const { reportActivity } = useSmartCore(); 
 
+  const reportActivityRef = useRef(reportActivity);
+  useEffect(() => { reportActivityRef.current = reportActivity; }, [reportActivity]);
+
+  const helpModalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear pending help-modal timeout on unmount
+  useEffect(() => () => {
+    if (helpModalTimeoutRef.current) { clearTimeout(helpModalTimeoutRef.current); helpModalTimeoutRef.current = null; }
+  }, []);
+
   // Report navigation to Core
   useEffect(() => {
-    reportActivity(currentPage);
-  }, [currentPage, reportActivity]);
+    reportActivityRef.current(currentPage);
+  }, [currentPage]);
 
   // App Settings State
   const [monitorDeviceId, setMonitorDeviceId] = useState<string>(() => localStorage.getItem('monitorDeviceId') || '');
@@ -47,8 +57,7 @@ const AppContent: React.FC = () => {
 
   // Mic EQ State
   const [micEqSettings, setMicEqSettings] = useState<MicEqSettings>(() => {
-    const saved = localStorage.getItem('micEqSettings');
-    return saved ? JSON.parse(saved) : { 
+    const defaults: MicEqSettings = { 
       micGain: 1.0, 
       voiceClarity: 0,
       noiseSuppression: false,
@@ -56,6 +65,14 @@ const AppContent: React.FC = () => {
       echoCancellation: false,
       compressor: false
     };
+    const saved = localStorage.getItem('micEqSettings');
+    if (!saved) return defaults;
+    try {
+      return JSON.parse(saved);
+    } catch (err) {
+      console.error("Error parsing micEqSettings", err);
+      return defaults;
+    }
   });
 
   // Device Lists
@@ -97,14 +114,16 @@ const AppContent: React.FC = () => {
   // --- DEVICE FETCHING ---
   const getDevices = async () => {
     setIsRefreshingDevices(true);
+    let stream: MediaStream | null = null;
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true }).catch(console.warn);
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(console.warn) || null;
       const dev = await navigator.mediaDevices.enumerateDevices();
       setInputDevices(dev.filter(d => d.kind === 'audioinput') as any);
       setOutputDevices(dev.filter(d => d.kind === 'audiooutput') as any);
     } catch (err) {
       console.error("Error fetching devices", err);
     } finally {
+      if (stream) stream.getTracks().forEach(t => t.stop());
       setIsRefreshingDevices(false);
     }
   };
@@ -130,10 +149,28 @@ const AppContent: React.FC = () => {
       if (window.electronAPI) {
           window.electronAPI.checkForUpdates();
           const cleanupFile = window.electronAPI.onFileOpened((path) => {
-             setIncomingMusicFile(path);
+             setIncomingMusicFile({ path, id: Date.now() });
              setCurrentPage(Page.MUSIC);
           });
-          return cleanupFile;
+          const cleanupUpdateAvailable = window.electronAPI.onUpdateAvailable((info) => {
+             setUpdateInfo(info);
+          });
+          const cleanupUpdateProgress = window.electronAPI.onUpdateProgress((progress) => {
+             setUpdateProgress(progress);
+          });
+          const cleanupUpdateDownloaded = window.electronAPI.onUpdateDownloaded(() => {
+             setUpdateDownloaded(true);
+          });
+          const cleanupUpdateError = window.electronAPI.onUpdateError((err) => {
+             console.error("Update error:", err);
+          });
+          return () => {
+              cleanupFile();
+              cleanupUpdateAvailable();
+              cleanupUpdateProgress();
+              cleanupUpdateDownloaded();
+              cleanupUpdateError();
+          };
       }
     }
   }, [isLoading, isTrayMode, isMiniMode]);
@@ -177,6 +214,7 @@ const AppContent: React.FC = () => {
                   monitorDeviceId={monitorDeviceId}
                   masterVolume={masterVolume}
                   initialFile={incomingMusicFile}
+                  onInitialFileConsumed={() => setIncomingMusicFile(undefined)}
                />
             </div>
 
@@ -209,8 +247,9 @@ const AppContent: React.FC = () => {
         {isLanguageModalOpen && <LanguageSelectorModal isOpen={isLanguageModalOpen} onSelect={(l) => { 
           setLanguage(l); 
           setIsLanguageModalOpen(false); 
+          if (helpModalTimeoutRef.current) { clearTimeout(helpModalTimeoutRef.current); helpModalTimeoutRef.current = null; }
           if (!localStorage.getItem('hasSeenHelp')) {
-            setTimeout(() => setIsHelpOpen(true), 300);
+            helpModalTimeoutRef.current = setTimeout(() => { helpModalTimeoutRef.current = null; setIsHelpOpen(true); }, 300);
           }
         }} />}
         {isHelpOpen && <HelpModal isOpen={isHelpOpen} onClose={handleCloseHelp} micInputDeviceId={micInputDeviceId} injectorDeviceId={injectorDeviceId} monitorDeviceId={monitorDeviceId} inputDevices={inputDevices} outputDevices={outputDevices} onOpenSelector={setActiveDeviceSelector} />}
@@ -225,10 +264,45 @@ const AppContent: React.FC = () => {
   );
 };
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, { hasError: boolean; error: Error | null }> {
+  state = { hasError: false, error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Renderer crashed:", error, errorInfo);
+  }
+
+  handleReload = () => {
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen w-screen bg-black text-white gap-4 p-8">
+          <h1 className="text-2xl font-bold text-red-500">Something went wrong</h1>
+          <p className="text-gray-400 text-sm max-w-lg text-center font-mono break-all">{this.state.error ? String(this.state.error.message || this.state.error) : 'Unknown error'}</p>
+          <button onClick={this.handleReload} className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-all active:scale-95">Reload</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const App: React.FC = () => (
   <LanguageProvider>
     <SmartCoreProvider>
-      <AppContent />
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
     </SmartCoreProvider>
   </LanguageProvider>
 );

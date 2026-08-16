@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { X, Save, Trash2, Edit2, Play, Check } from 'lucide-react';
-import { EQProfile } from './EqualizerModal';
+import { X, Save, Trash2, Edit2, Play, Check, ShieldAlert } from 'lucide-react';
+import { EQProfile, DEFAULT_PROFILE_IDS } from './EqualizerModal';
 import { useLanguage } from '../context/LanguageContext';
 
 interface ProfileListModalProps {
@@ -26,12 +26,14 @@ const ProfileListModal: React.FC<ProfileListModalProps> = ({
   const { t } = useLanguage();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const startEdit = (profile: EQProfile) => {
     setEditingId(profile.id);
     setEditName(profile.name);
+    setErrorMsg(null);
   };
 
   const saveEdit = (id: string) => {
@@ -39,6 +41,15 @@ const ProfileListModal: React.FC<ProfileListModalProps> = ({
       onRename(id, editName.trim());
     }
     setEditingId(null);
+  };
+
+  const handleDeleteClick = (profile: EQProfile) => {
+    if (DEFAULT_PROFILE_IDS.includes(profile.id)) {
+      setErrorMsg(`"${profile.name}" is a default profile and cannot be deleted`);
+      return;
+    }
+    setErrorMsg(null);
+    onDelete(profile.id);
   };
 
   return (
@@ -112,10 +123,10 @@ const ProfileListModal: React.FC<ProfileListModalProps> = ({
                                 >
                                     <Edit2 size={14} />
                                 </button>
-                                {/* Prevent deleting default profiles if you wanted, but for now allow all saved ones */}
-                                {['flat', 'bass', 'treble', 'vocal', 'rock'].includes(profile.id) ? null : (
+                                {/* Prevent deleting default profiles */}
+                                {DEFAULT_PROFILE_IDS.includes(profile.id) ? null : (
                                     <button 
-                                        onClick={() => onDelete(profile.id)}
+                                        onClick={() => handleDeleteClick(profile)}
                                         className="p-2 hover:bg-red-600 hover:text-white rounded-lg text-gray-400 transition-colors"
                                         title="Delete"
                                     >
@@ -130,7 +141,11 @@ const ProfileListModal: React.FC<ProfileListModalProps> = ({
         </div>
 
         <div className="p-4 border-t border-white/5 bg-zinc-900/30 text-center">
-            <span className="text-xs text-gray-500 font-mono">{profiles.length} PROFILES AVAILABLE</span>
+            {errorMsg ? (
+              <span className="text-xs text-red-400 font-mono flex items-center justify-center gap-1.5"><ShieldAlert size={12} />{errorMsg}</span>
+            ) : (
+              <span className="text-xs text-gray-500 font-mono">{profiles.length} PROFILES AVAILABLE</span>
+            )}
         </div>
 
       </div>

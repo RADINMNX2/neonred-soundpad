@@ -1,8 +1,13 @@
 
+// HEX validation (#rgb / #rrggbb)
+export const isValidHexColor = (hex: string): boolean => {
+  return /^#(?:[a-f\d]{3}|[a-f\d]{6})$/i.test(hex.trim());
+};
+
 // HEX to RGB
 export const hexToRgb = (hex: string) => {
   const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-  hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+  hex = hex.trim().replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result ? {
     r: parseInt(result[1], 16),

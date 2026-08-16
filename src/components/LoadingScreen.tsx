@@ -8,25 +8,29 @@ interface LoadingScreenProps {
 const LoadingScreen: React.FC<LoadingScreenProps> = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
   const [isFading, setIsFading] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
 
   useEffect(() => {
-    // Smooth Progress Bar
+    if (isComplete) return;
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setIsFading(true);
-            setTimeout(onComplete, 800); 
-          }, 800);
-          return 100;
-        }
-        return prev + 1; 
-      });
+      setProgress(prev => (prev >= 100 ? 100 : prev + 1));
     }, 30); // Speed of loading
-
     return () => clearInterval(interval);
-  }, [onComplete]);
+  }, [isComplete]);
+
+  useEffect(() => {
+    if (progress >= 100) setIsComplete(true);
+  }, [progress]);
+
+  useEffect(() => {
+    if (!isComplete) return;
+    const fadeTimer = window.setTimeout(() => setIsFading(true), 800);
+    const completeTimer = window.setTimeout(onComplete, 1600);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(completeTimer);
+    };
+  }, [isComplete, onComplete]);
 
   return (
     <div className={`fixed inset-0 z-[9999] bg-black flex items-center justify-center transition-all duration-1000 ${isFading ? 'opacity-0 scale-110 pointer-events-none' : 'opacity-100 scale-100'}`}>

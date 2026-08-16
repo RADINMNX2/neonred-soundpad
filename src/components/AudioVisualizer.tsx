@@ -19,6 +19,12 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, className }
     const dataArray = new Uint8Array(bufferLength);
     let animationId: number;
 
+    // Create Red Neon Gradient once (reused for every bar)
+    const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+    gradient.addColorStop(0, '#7f1d1d'); // Dark Red
+    gradient.addColorStop(0.5, '#ef4444'); // Red
+    gradient.addColorStop(1, '#ffaaaa'); // White-ish Red
+
     const draw = () => {
       animationId = requestAnimationFrame(draw);
       analyser.getByteFrequencyData(dataArray);
@@ -30,13 +36,9 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, className }
       let x = 0;
 
       for (let i = 0; i < bufferLength; i++) {
-        barHeight = dataArray[i] / 2;
+        if (x >= canvas.width) break;
 
-        // Create Red Neon Gradient
-        const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        gradient.addColorStop(0, '#7f1d1d'); // Dark Red
-        gradient.addColorStop(0.5, '#ef4444'); // Red
-        gradient.addColorStop(1, '#ffaaaa'); // White-ish Red
+        barHeight = dataArray[i] / 2;
 
         ctx.fillStyle = gradient;
         

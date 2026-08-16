@@ -11,9 +11,12 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
+const LANGUAGES: Language[] = ['en', 'fa'];
+
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
-    return (localStorage.getItem('app_language') as Language) || 'en';
+    const stored = localStorage.getItem('app_language');
+    return LANGUAGES.includes(stored as Language) ? (stored as Language) : 'en';
   });
 
   useEffect(() => {

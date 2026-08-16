@@ -7,6 +7,7 @@ const https = require('https');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const { pathToFileURL } = require('url');
 const sflxRuntime = require('./spatiflac-extension-runtime');
 
 // Configure Logging
@@ -28,6 +29,7 @@ let miniPlayerWindow = null;
 let trayWindow = null;
 let tray = null;
 let isQuitting = false;
+let ipcRegistered = false;
 
 // Store music state to send to windows
 let currentMusicState = { track: null, isPlaying: false, currentTime: 0, duration: 0 };
@@ -40,7 +42,7 @@ if (!gotTheLock) {
 } else {
   app.on('second-instance', (event, commandLine, workingDirectory) => {
     // Someone tried to run a second instance, we should focus our window.
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
@@ -78,7 +80,7 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-available', (info) => {
     log.info('Update available:', info);
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-available', info);
     }
   });
@@ -89,20 +91,20 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     log.error('Update error:', err);
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-error', err.message);
     }
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-progress', progressObj);
     }
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     log.info('Update downloaded');
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-downloaded', info);
     }
   });
@@ -129,20 +131,26 @@ function createMiniPlayerWindow() {
 
   const miniUrl = isDev
     ? 'http://localhost:3000?mode=mini'
-    : `file://${path.join(__dirname, 'build/index.html')}?mode=mini`;
+    : `${pathToFileURL(path.join(__dirname, 'build/index.html')).href}?mode=mini`;
 
   miniPlayerWindow.loadURL(miniUrl);
 
   miniPlayerWindow.on('close', (e) => {
       if (!isQuitting) {
           e.preventDefault();
-          miniPlayerWindow.hide();
+          if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) miniPlayerWindow.hide();
       }
   });
 
   miniPlayerWindow.once('ready-to-show', () => {
       // Don't show immediately, wait for explicit switch
-      miniPlayerWindow.webContents.send('music-state-change', currentMusicState);
+      if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
+          miniPlayerWindow.webContents.send('music-state-change', currentMusicState);
+      }
+  });
+
+  miniPlayerWindow.on('closed', () => {
+    miniPlayerWindow = null;
   });
 }
 
@@ -169,17 +177,21 @@ function createTrayWindow() {
 
   const trayUrl = isDev
     ? 'http://localhost:3000?mode=tray'
-    : `file://${path.join(__dirname, 'build/index.html')}?mode=tray`;
+    : `${pathToFileURL(path.join(__dirname, 'build/index.html')).href}?mode=tray`;
 
   trayWindow.loadURL(trayUrl);
 
   trayWindow.on('blur', () => {
-    trayWindow.hide();
+    if (trayWindow && !trayWindow.isDestroyed()) trayWindow.hide();
+  });
+
+  trayWindow.on('closed', () => {
+    trayWindow = null;
   });
 }
 
 function toggleTrayWindow() {
-  if (!trayWindow || !tray) return;
+  if (!trayWindow || !tray || trayWindow.isDestroyed()) return;
   
   if (trayWindow.isVisible()) {
     trayWindow.hide();
@@ -212,14 +224,14 @@ function createTray() {
   
   // Left Click: Smart Toggle
   tray.on('click', () => {
-    if (miniPlayerWindow && miniPlayerWindow.isVisible()) {
+    if (miniPlayerWindow && !miniPlayerWindow.isDestroyed() && miniPlayerWindow.isVisible()) {
         miniPlayerWindow.hide();
-        if (mainWindow) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.show();
             mainWindow.focus();
         }
     } else {
-        if (mainWindow) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
             if (mainWindow.isVisible()) {
                 if (mainWindow.isFocused()) mainWindow.hide();
                 else mainWindow.focus();
@@ -262,7 +274,7 @@ function createWindow() {
 
   const startUrl = isDev
     ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, 'build/index.html')}`;
+    : pathToFileURL(path.join(__dirname, 'build/index.html')).href;
 
   mainWindow.loadURL(startUrl);
 
@@ -273,7 +285,7 @@ function createWindow() {
       // LOGIC: If music is playing, switch to Mini Player. Else, just hide.
       if (currentMusicState.isPlaying) {
           mainWindow.hide();
-          if (miniPlayerWindow) {
+          if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
               const display = screen.getPrimaryDisplay();
               const { width, height } = display.workAreaSize;
               // Bottom Right Positioning
@@ -302,7 +314,13 @@ function createWindow() {
       }
   });
 
-  // IPC Listeners
+  }
+
+// --- IPC Handlers (registered once, not per window) ---
+function registerIpcHandlers() {
+  if (ipcRegistered) return;
+  ipcRegistered = true;
+
   ipcMain.on('window-minimize', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
   });
@@ -324,8 +342,8 @@ function createWindow() {
   });
 
   ipcMain.on('window-hide-to-tray', () => {
-    if (miniPlayerWindow) miniPlayerWindow.hide();
-    if (mainWindow) mainWindow.hide();
+    if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) miniPlayerWindow.hide();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
     if (!tray) createTray();
   });
 
@@ -334,8 +352,8 @@ function createWindow() {
           mainWindow.show();
           mainWindow.focus();
       }
-      if (miniPlayerWindow) miniPlayerWindow.hide();
-      if (trayWindow) trayWindow.hide();
+      if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) miniPlayerWindow.hide();
+      if (trayWindow && !trayWindow.isDestroyed()) trayWindow.hide();
   });
 
   ipcMain.on('tray-quit-app', () => {
@@ -345,8 +363,8 @@ function createWindow() {
 
   // --- Music Sync IPC ---
   ipcMain.on('switch-to-mini', () => {
-      if (mainWindow) mainWindow.hide();
-      if (miniPlayerWindow) {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+      if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
           // Position at bottom right of primary display
           const display = screen.getPrimaryDisplay();
           const { width, height } = display.workAreaSize;
@@ -390,13 +408,20 @@ function createWindow() {
      if (!isDev) {
          autoUpdater.checkForUpdates().catch(err => {
              log.error("Check for updates failed", err);
-             if (mainWindow) mainWindow.webContents.send('update-error', err.message);
+             if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-error', err.message);
          });
      }
   });
 
-  ipcMain.on('download-update', () => {
-     autoUpdater.downloadUpdate();
+  ipcMain.on('download-update', async () => {
+     try {
+         await autoUpdater.downloadUpdate();
+     } catch (err) {
+         log.error('Download update failed', err);
+         if (mainWindow && !mainWindow.isDestroyed()) {
+             mainWindow.webContents.send('update-error', err.message);
+         }
+     }
   });
 
   ipcMain.on('install-update', () => {
@@ -459,12 +484,24 @@ ipcMain.handle('save-source-code', async () => {
 
 ipcMain.handle('save-sound-file', async (event, sourcePath) => {
   try {
+    if (!sourcePath || typeof sourcePath !== 'string') throw new Error('Invalid source path');
+    const allowedExtensions = ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.mp4', '.webm', '.m4b', '.aac'];
+    const extension = path.extname(sourcePath);
+    if (!allowedExtensions.includes(extension.toLowerCase())) {
+      throw new Error(`Unsupported audio file type: ${extension || 'none'}`);
+    }
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error('Source file not found');
+    }
+    const stat = await fs.promises.stat(sourcePath);
+    if (!stat.isFile()) {
+      throw new Error('Source path is not a file');
+    }
     const userDataPath = app.getPath('userData');
     const soundsDir = path.join(userDataPath, 'sounds');
     if (!fs.existsSync(soundsDir)) {
       await fs.promises.mkdir(soundsDir, { recursive: true });
     }
-    const extension = path.extname(sourcePath);
     const uniqueName = `${crypto.randomUUID()}${extension}`;
     const destPath = path.join(soundsDir, uniqueName);
     await fs.promises.copyFile(sourcePath, destPath);
@@ -477,8 +514,13 @@ ipcMain.handle('save-sound-file', async (event, sourcePath) => {
 ipcMain.handle('delete-sound-file', async (event, filePath) => {
   try {
     if (!filePath) return { success: false };
-    if (fs.existsSync(filePath)) {
-      await fs.promises.unlink(filePath);
+    const soundsDir = path.resolve(app.getPath('userData'), 'sounds');
+    const resolvedPath = path.resolve(filePath);
+    if (resolvedPath !== soundsDir && !resolvedPath.startsWith(soundsDir + path.sep)) {
+      return { success: false, error: 'Path outside sounds directory' };
+    }
+    if (fs.existsSync(resolvedPath)) {
+      await fs.promises.unlink(resolvedPath);
       return { success: true };
     }
     return { success: false, error: 'File not found' };
@@ -490,28 +532,33 @@ ipcMain.handle('delete-sound-file', async (event, filePath) => {
 function downloadUrl(url, destPath, onProgress) {
   return new Promise((resolve, reject) => {
     const follow = (u, redirectsLeft) => {
-      https.get(u, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          res.resume();
-          if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
-          return follow(res.headers.location, redirectsLeft - 1);
-        }
-        if (res.statusCode !== 200) {
-          res.resume();
-          return reject(new Error(`HTTP ${res.statusCode}`));
-        }
-        const total = parseInt(res.headers['content-length'] || '0', 10);
-        let received = 0;
-        const stream = fs.createWriteStream(destPath);
-        res.on('data', (chunk) => {
-          received += chunk.length;
-          if (total > 0) onProgress(received / total);
-        });
-        res.pipe(stream);
-        stream.on('finish', () => stream.close(() => resolve()));
-        stream.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
-        res.on('error', (err) => { stream.destroy(); fs.unlink(destPath, () => {}); reject(err); });
-      }).on('error', reject);
+      let req;
+      try {
+        req = https.get(u, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            res.resume();
+            if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
+            return follow(new URL(res.headers.location, u), redirectsLeft - 1);
+          }
+          if (res.statusCode !== 200) {
+            res.resume();
+            return reject(new Error(`HTTP ${res.statusCode}`));
+          }
+          const total = parseInt(res.headers['content-length'] || '0', 10);
+          let received = 0;
+          const stream = fs.createWriteStream(destPath);
+          res.on('data', (chunk) => {
+            received += chunk.length;
+            if (total > 0) onProgress(received / total);
+          });
+          res.pipe(stream);
+          stream.on('finish', () => stream.close(() => resolve()));
+          stream.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
+          res.on('error', (err) => { stream.destroy(); fs.unlink(destPath, () => {}); reject(err); });
+        }).on('error', reject);
+      } catch (err) {
+        return reject(err);
+      }
     };
     follow(url, 4);
   });
@@ -573,6 +620,10 @@ function sanitizeForFile(name) {
   return String(name || 'track').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim() || 'track';
 }
 
+function sanitizeCachePart(value) {
+  return String(value == null ? '' : value).replace(/[^a-zA-Z0-9]/g, '-');
+}
+
 async function resolveYoutubeStream(query) {
   const ytsearch = loadYtSearch();
   const result = await ytsearch(query);
@@ -594,7 +645,11 @@ function downloadYoutubeTo(videoId, format, destPath, onProgress) {
     stream.pipe(file);
     file.on('finish', () => file.close(() => resolve()));
     stream.on('error', (err) => { file.destroy(); fs.unlink(destPath, () => {}); reject(err); });
-    file.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
+    file.on('error', (err) => {
+      stream.destroy();
+      try { fs.unlinkSync(destPath); } catch (e) {}
+      reject(err);
+    });
   });
 }
 
@@ -793,19 +848,19 @@ ipcMain.handle('extensions-download', async (event, opts) => {
 
 ipcMain.handle('online-full-track', async (event, opts) => {
   try {
-    const { query, cacheKey } = opts || {};
+    const { query, cacheKey, downloadId } = opts || {};
     if (!query) return { success: false, error: 'Missing search query' };
     const dir = onlineCacheDir();
     await fs.promises.mkdir(dir, { recursive: true });
-    const base = sanitizeForFile(cacheKey || query);
+    const { videoId, format } = await resolveYoutubeStream(query);
+    const base = `cache-${sanitizeCachePart(videoId)}-${sanitizeCachePart(cacheKey || query)}`;
     const existing = await fs.promises.readdir(dir).catch(() => []);
     const match = existing.find(f => f.indexOf(base + '.best.') === 0);
     if (match) return { success: true, path: path.join(dir, match), cached: true };
 
-    const { videoId, format } = await resolveYoutubeStream(query);
     const ext = String(format.mimeType || '').split('/')[1]?.split(';')[0] || 'm4a';
     const destPath = path.join(dir, `${base}.best.${ext}`);
-    const sendProgress = makeProgressSender(event, opts.downloadId || crypto.randomUUID());
+    const sendProgress = makeProgressSender(event, downloadId || crypto.randomUUID());
     await downloadYoutubeTo(videoId, format, destPath, sendProgress);
     return { success: true, path: destPath, cached: false, format: ext };
   } catch (error) {
@@ -828,15 +883,16 @@ ipcMain.handle('online-download-track', async (event, opts) => {
 
     if (!query) return { success: false, error: 'Missing search query' };
     const { videoId, format: audioFormat } = await resolveYoutubeStream(query);
+    const cacheBase = `cache-${sanitizeCachePart(videoId)}-${sanitizeCachePart(filename || 'track')}`;
     if (format === 'flac') {
-      const destPath = path.join(baseDir, `${sanitizeForFile(filename || 'track')}.flac`);
+      const destPath = path.join(baseDir, `${cacheBase}.flac`);
       if (fs.existsSync(destPath)) return { success: true, path: destPath, cached: true };
       await downloadYoutubeFlac(videoId, audioFormat, destPath, sendProgress);
       return { success: true, path: destPath };
     }
 
     const ext = String(audioFormat.mimeType || '').split('/')[1]?.split(';')[0] || 'm4a';
-    const destPath = path.join(baseDir, `${sanitizeForFile(filename || 'track')}.${ext}`);
+    const destPath = path.join(baseDir, `${cacheBase}.${ext}`);
     if (fs.existsSync(destPath)) return { success: true, path: destPath, cached: true };
     await downloadYoutubeTo(videoId, audioFormat, destPath, sendProgress);
     return { success: true, path: destPath };
@@ -860,7 +916,16 @@ ipcMain.handle('install-vb-cable', async () => {
       throw new Error('Installer file missing');
     }
     const command = `Start-Process -FilePath "${installerPath}" -Verb RunAs`;
-    spawn('powershell.exe', ['-Command', command], { windowsHide: true });
+    const child = spawn('powershell.exe', ['-Command', command], { windowsHide: true });
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    const exitCode = await new Promise((resolve, reject) => {
+      child.on('error', (err) => reject(err));
+      child.on('close', (code) => resolve(code));
+    });
+    if (exitCode !== 0) {
+      return { success: false, error: `Installer exited with code ${exitCode}${stderr ? ': ' + stderr.trim() : ''}` };
+    }
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
@@ -873,6 +938,7 @@ app.on('before-quit', () => {
 
 app.whenReady().then(() => {
   setupAutoUpdater();
+  registerIpcHandlers();
   createWindow();
   createMiniPlayerWindow(); 
   createTray();

@@ -35,9 +35,11 @@ export const mapKeyToElectronAccelerator = (e: KeyboardEvent): string | null => 
       'Multiply': 'NumMult',
       'Divide': 'NumDiv',
       'Decimal': 'NumDec',
-      'Enter': 'Enter', // Numpad Enter is usually just Enter or Return, but specifically NumEnter isn't standard in globalShortcut
     };
-    return numpadMap[numKey] || `Num${numKey}`;
+    if (numpadMap[numKey]) return numpadMap[numKey];
+    // Numpad Enter is not distinguishable from Enter in globalShortcut — skip it
+    if (/^[0-9]$/.test(numKey)) return `Num${numKey}`;
+    return null;
   }
 
   // 6. Special & Navigation Keys
@@ -100,12 +102,6 @@ export const mapKeyToElectronAccelerator = (e: KeyboardEvent): string | null => 
 
   if (mediaMap[code]) {
     return mediaMap[code];
-  }
-
-  // Fallback: If we assume standard US layout, we can try to use the key itself if it's a single char
-  // This is risky for non-US layouts but better than nothing.
-  if (key.length === 1) {
-    return key.toUpperCase();
   }
 
   return null;

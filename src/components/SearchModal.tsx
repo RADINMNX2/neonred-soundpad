@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Search, Music, X, CornerDownLeft } from 'lucide-react';
 import { SoundEffect } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -19,9 +19,9 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, sounds, onSe
   const listRef = useRef<HTMLDivElement>(null);
 
   // Filter sounds
-  const filteredSounds = sounds.filter(s => 
+  const filteredSounds = useMemo(() => sounds.filter(s => 
     s.name.toLowerCase().includes(query.toLowerCase())
-  );
+  ), [sounds, query]);
 
   useEffect(() => {
     if (isOpen) {
@@ -36,30 +36,31 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, sounds, onSe
   }, [query]);
 
   // Keyboard Navigation
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (filteredSounds.length === 0) return;
+      setSelectedIndex(prev => Math.min(prev + 1, filteredSounds.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex(prev => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filteredSounds[selectedIndex]) {
+        onSelect(filteredSounds[selectedIndex].id);
+        onClose();
+      }
+    } else if (e.key === 'Escape') {
+      onClose();
+    }
+  }, [filteredSounds, selectedIndex, onSelect, onClose]);
+
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex(prev => Math.min(prev + 1, filteredSounds.length - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex(prev => Math.max(prev - 1, 0));
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (filteredSounds[selectedIndex]) {
-          onSelect(filteredSounds[selectedIndex].id);
-          onClose();
-        }
-      } else if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, filteredSounds, selectedIndex, onSelect, onClose]);
+  }, [isOpen, handleKeyDown]);
 
   // Scroll active item into view
   useEffect(() => {

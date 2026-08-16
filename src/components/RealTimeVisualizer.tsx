@@ -1,5 +1,4 @@
-
-import React, { useEffect, useRef, memo } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import { useSmartCore } from '../context/SmartCoreContext';
 import { VisualizerConfig } from '../types';
 
@@ -29,6 +28,14 @@ const RealTimeVisualizer: React.FC<RealTimeVisualizerProps> = memo(({
   
   // Track previous bar heights for smooth falling effect
   const lastHeights = useRef<number[]>([]);
+  const externalDataRef = useRef<Uint8Array | null>(null);
+  externalDataRef.current = externalData || null;
+
+  const [hasExternalData, setHasExternalData] = useState(false);
+
+  useEffect(() => {
+    setHasExternalData(!!externalData && externalData.length > 0);
+  }, [externalData]);
 
   // Local config defaults
   const vHeight = config?.height ?? 1.0;
@@ -41,7 +48,7 @@ const RealTimeVisualizer: React.FC<RealTimeVisualizerProps> = memo(({
     if (!canvas) return;
     
     // Only optimize if we are NOT an external receiver (Mini Player should always draw when data comes)
-    if (isBackground && !simulate && !externalData) {
+    if (isBackground && !simulate && !hasExternalData) {
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         return;
     }
@@ -59,17 +66,16 @@ const RealTimeVisualizer: React.FC<RealTimeVisualizerProps> = memo(({
     const dataArray = new Uint8Array(bufferLength);
     
     const renderFrame = () => {
-      animationFrameRef.current = requestAnimationFrame(renderFrame);
-
       const width = canvas.width;
       const height = canvas.height;
       ctx.clearRect(0, 0, width, height);
 
       let sourceData: Uint8Array | null = null;
 
-      if (externalData) {
+      const data = externalDataRef.current;
+      if (data && data.length > 0) {
           // MODE 1: Slave (Mini Player)
-          sourceData = externalData;
+          sourceData = data;
       } else if (simulate) {
           // MODE 2: Simulation (Settings Preview)
           const time = performance.now() / 400;
@@ -92,18 +98,24 @@ const RealTimeVisualizer: React.FC<RealTimeVisualizerProps> = memo(({
             lastHeights.current[i] *= 0.85;
             if (lastHeights.current[i] > 0.1) active = true;
           }
-          if (!active) return;
+          if (!active) {
+            animationFrameRef.current = null;
+            return;
+          }
       }
 
       // Drawing Logic
-      if (!sourceData) return;
+      if (!sourceData) {
+        animationFrameRef.current = requestAnimationFrame(renderFrame);
+        return;
+      }
 
       const barWidth = (width / vBarCount);
       const centerX = width / 2;
       
       // We only use the first 70% of frequency data because higher bins are usually empty
       // If externalData provided, use its length as buffer length
-      const effectiveBufferLen = externalData ? externalData.length : bufferLength;
+      const effectiveBufferLen = sourceData.length;
       const binsPerBar = Math.floor((effectiveBufferLen * 0.7) / vBarCount) || 1;
 
       for (let i = 0; i < vBarCount; i++) {
@@ -120,7 +132,7 @@ const RealTimeVisualizer: React.FC<RealTimeVisualizerProps> = memo(({
           if (targetHeight > height) targetHeight = height;
 
           // Minimum activity threshold (keep it alive)
-          if ((isPlaying || externalData) && targetHeight < 2) targetHeight = 2;
+          if ((isPlaying || externalDataRef.current) && targetHeight < 2) targetHeight = 2;
 
           // Smoothing: Ease towards target, fall slowly
           if (targetHeight > lastHeights.current[i]) {
@@ -144,6 +156,8 @@ const RealTimeVisualizer: React.FC<RealTimeVisualizerProps> = memo(({
             ctx.fillRect(centerX - ((i + 1) * barWidth / 2), height - h, drawW, h);
           }
       }
+
+      animationFrameRef.current = requestAnimationFrame(renderFrame);
     };
 
     renderFrame();
@@ -151,7 +165,7 @@ const RealTimeVisualizer: React.FC<RealTimeVisualizerProps> = memo(({
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [analyser, isPlaying, color, simulate, isBackground, vHeight, vSensitivity, vBarCount, vGap, externalData, onSync]);
+  }, [analyser, isPlaying, color, simulate, isBackground, vHeight, vSensitivity, vBarCount, vGap, hasExternalData, onSync]);
 
   return (
     <canvas 

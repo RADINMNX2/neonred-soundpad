@@ -18,7 +18,8 @@ import { loadExtensions, downloadOnlineTrack, resolveFullTrack, EXTENSIONS_CHANG
 interface MusicPlayerProps {
   monitorDeviceId: string;
   masterVolume: number;
-  initialFile?: string; 
+  initialFile?: { path: string; id: number };
+  onInitialFileConsumed?: () => void;
 }
 
 // 10-band frequencies standard for EQ
@@ -27,9 +28,13 @@ const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
   monitorDeviceId, 
   masterVolume,
-  initialFile
+  initialFile,
+  onInitialFileConsumed
 }) => {
   const { t } = useLanguage();
+  
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   
   // --- STATE ---
   const [playlist, setPlaylist] = useState<MusicTrack[]>(() => {
@@ -98,6 +103,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const onlineSessionRef = useRef<{ tracks: OnlineTrack[]; index: number } | null>(null);
   useEffect(() => { onlineSessionRef.current = onlineSession; }, [onlineSession]);
   const onlineMappedRef = useRef<Record<string, number>>({});
+  // Atomic playlist-length mirror for online plays (immune to render timing races)
+  const nextPlaylistIdxRef = useRef(playlist.length);
+  useEffect(() => { nextPlaylistIdxRef.current = playlist.length; }, [playlist]);
+  // Guards against double-triggered online plays (e.g. rapid handleNext clicks)
+  const onlinePlayInFlightRef = useRef(false);
 
   useEffect(() => {
     const handler = () => setOnlineExtensions(loadExtensions());
@@ -107,7 +117,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   const handleOnlinePlay = useCallback(async (track: OnlineTrack, contextTracks: OnlineTrack[]): Promise<{ success: boolean; isPreview?: boolean; cached?: boolean; error?: string }> => {
     try {
-      const sessionIndex = Math.max(0, contextTracks.findIndex(t => t.id === track.id));
+      if (onlinePlayInFlightRef.current) {
+        return { success: false, error: 'An online track is already loading' };
+      }
+      onlinePlayInFlightRef.current = true;
+
+      const foundIdx = contextTracks.findIndex(t => t.id === track.id);
+      if (foundIdx === -1) return { success: false, error: 'Track not found in session' };
+      const sessionIndex = foundIdx;
       setOnlineSession({ tracks: contextTracks, index: sessionIndex });
 
       const existingIdx = onlineMappedRef.current[track.id];
@@ -118,8 +135,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       }
 
       const resolved = await resolveFullTrack(track);
-      const idx = playlistRef.current.length;
       if (resolved.success && resolved.path) {
+        const idx = nextPlaylistIdxRef.current;
+        nextPlaylistIdxRef.current = idx + 1;
         const newTrack: MusicTrack = {
           id: crypto.randomUUID(),
           title: track.title,
@@ -138,6 +156,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         return { success: true, cached: !!resolved.cached };
       }
       if (track.previewUrl) {
+        const idx = nextPlaylistIdxRef.current;
+        nextPlaylistIdxRef.current = idx + 1;
         const newTrack: MusicTrack = {
           id: crypto.randomUUID(),
           title: track.title,
@@ -157,6 +177,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       return { success: false, error: resolved.error || 'No stream available' };
     } catch (e: any) {
       return { success: false, error: e.message || 'Playback failed' };
+    } finally {
+      onlinePlayInFlightRef.current = false;
     }
   }, []);
 
@@ -196,49 +218,50 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   
   // Handle Initial File from OS (Open With)
   useEffect(() => {
-      if (initialFile) {
-          const handleOpenWith = async () => {
-              const normalizedPath = initialFile.replace(/\\/g, '/').toLowerCase();
-              const existingIndex = playlistRef.current.findIndex(track => 
-                  track.path && track.path.replace(/\\/g, '/').toLowerCase() === normalizedPath
-              );
+      if (!initialFile) return;
+      const filePath = initialFile.path;
+      const handleOpenWith = async () => {
+          const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
+          const existingIndex = playlistRef.current.findIndex(track => 
+              track.path && track.path.replace(/\\/g, '/').toLowerCase() === normalizedPath
+          );
 
-              if (existingIndex !== -1) {
-                  setCurrentTrackIndex(existingIndex);
-                  setIsPlaying(true);
-              } else {
-                  const filename = initialFile.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, "") || "Unknown";
-                  const tempId = crypto.randomUUID();
-                  
-                  let title = filename;
-                  let artist = t('unknownArtist');
-                  let album = "Unknown Album";
-                  let cover = undefined;
+          if (existingIndex !== -1) {
+              setCurrentTrackIndex(existingIndex);
+              setIsPlaying(true);
+          } else {
+              const filename = filePath.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, "") || "Unknown";
+              const tempId = crypto.randomUUID();
+              
+              let title = filename;
+              let artist = tRef.current('unknownArtist');
+              let album = "Unknown Album";
+              let cover = undefined;
 
-                  try {
-                      const response = await fetch(`file://${initialFile}`);
-                      const blob = await response.blob();
-                      const meta = await parseAudioMetadata(blob);
-                      if (meta.title) title = meta.title;
-                      if (meta.artist) artist = meta.artist;
-                      if (meta.album) album = meta.album;
-                      if (meta.cover) cover = meta.cover;
-                  } catch (e) { console.warn("Could not parse initial file metadata", e); }
+              try {
+                  const response = await fetch(`file://${filePath}`);
+                  const blob = await response.blob();
+                  const meta = await parseAudioMetadata(blob);
+                  if (meta.title) title = meta.title;
+                  if (meta.artist) artist = meta.artist;
+                  if (meta.album) album = meta.album;
+                  if (meta.cover) cover = meta.cover;
+              } catch (e) { console.warn("Could not parse initial file metadata", e); }
 
-                  const newTrack: MusicTrack = {
-                      id: tempId, title, artist, album, 
-                      url: `file://${initialFile}`, path: initialFile, 
-                      duration: 0, cover
-                  };
-                  
-                  setPlaylist(prev => [newTrack, ...prev]);
-                  setCurrentTrackIndex(0);
-                  setIsPlaying(true);
-              }
-          };
-          handleOpenWith();
-      }
-  }, [initialFile, t]);
+              const newTrack: MusicTrack = {
+                  id: tempId, title, artist, album, 
+                  url: `file://${filePath}`, path: filePath, 
+                  duration: 0, cover
+              };
+              
+              setPlaylist(prev => [newTrack, ...prev]);
+              setCurrentTrackIndex(0);
+              setIsPlaying(true);
+          }
+          onInitialFileConsumed?.();
+      };
+      handleOpenWith();
+  }, [initialFile]);
 
   // Extract color when track changes
   const currentTrack = playlist[currentTrackIndex];
@@ -257,7 +280,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           window.electronAPI.syncMusicState({
               track: currentTrack || null,
               isPlaying: isPlaying,
-              currentTime: currentTime,
+              currentTime: audioElementRef.current ? audioElementRef.current.currentTime : currentTime,
               duration: duration
           });
       }
@@ -276,9 +299,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     if (isLoop && !isShuffle) { 
         if (audioElementRef.current) { 
             audioElementRef.current.currentTime = 0; 
+            setCurrentTime(0);
             audioElementRef.current.play(); 
         } 
         return; 
+    }
+    if (!isLoop && playlistRef.current.length <= 1) {
+        setIsPlaying(false);
+        if (audioElementRef.current) audioElementRef.current.pause();
+        return;
     }
     if (isShuffle) setCurrentTrackIndex(Math.floor(Math.random() * playlistRef.current.length));
     else setCurrentTrackIndex((prev) => (prev + 1) % playlistRef.current.length);
@@ -341,7 +370,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     audioContextRef.current = ctx;
 
     const audio = new Audio();
-    audio.crossOrigin = "anonymous";
     audioElementRef.current = audio;
 
     // Immediately route audio element to the monitor device (not VB-Audio injector)
@@ -444,6 +472,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
         if (currentAudioSrcRef.current !== newSrc) {
             audio.src = newSrc;
+            // Only use CORS for http(s) URLs; file:// and blob: break with it
+            if (newSrc.startsWith('http')) audio.crossOrigin = 'anonymous';
+            else audio.removeAttribute('crossorigin');
             currentAudioSrcRef.current = newSrc;
             if (isPlaying) doPlay();
         } else {
@@ -530,6 +561,43 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       }
   }, [isPlaying]);
 
+  const confirmDeleteTracks = () => {
+      const toDelete = trackToDelete ? new Set([trackToDelete]) : selectedTrackIds;
+      if (toDelete.size === 0) return;
+      const currentId = playlist[currentTrackIndex]?.id;
+      const isCurrentDeleted = currentId && toDelete.has(currentId);
+      let shift = 0;
+      if (currentTrackIndex !== -1 && !isCurrentDeleted) {
+          for (let i = 0; i < currentTrackIndex; i++) if (toDelete.has(playlist[i].id)) shift++;
+      }
+      const deletedIndexes: number[] = [];
+      playlist.forEach((p, i) => {
+          if (toDelete.has(p.id)) {
+              if (p.onlineId) delete onlineMappedRef.current[p.onlineId];
+              deletedIndexes.push(i);
+          }
+      });
+      // Decrement stored online indexes for tracks that follow any deleted track
+      Object.keys(onlineMappedRef.current).forEach(oid => {
+          let delta = 0;
+          for (const di of deletedIndexes) if (onlineMappedRef.current[oid] > di) delta++;
+          if (delta > 0) onlineMappedRef.current[oid] -= delta;
+      });
+      if (isCurrentDeleted) setOnlineSession(null);
+      setPlaylist(prev => prev.filter(t => !toDelete.has(t.id)));
+      if (isCurrentDeleted) {
+          setIsPlaying(false);
+          setCurrentTrackIndex(-1);
+          if (audioElementRef.current) audioElementRef.current.pause();
+      } else if (shift > 0) {
+          setCurrentTrackIndex(prev => prev - shift);
+      }
+      setTrackToDelete(null);
+      setSelectedTrackIds(new Set());
+      setDeleteConfirmOpen(false);
+      setIsSelectionMode(false);
+  };
+
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-black via-zinc-950 to-black p-4 md:p-6 animate-fade-in relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-red-600/5 rounded-full blur-[120px] pointer-events-none"></div>
@@ -583,7 +651,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <p className="text-gray-400 font-medium font-persian">{currentTrack?.artist || (playlist.length > 0 ? t('unknownArtist') : t('addSongsDesc'))}</p>
                 </div>
 
-                <div className="w-full group/progress cursor-pointer" onClick={(e) => { if (!progressRef.current || !audioElementRef.current) return; const rect = progressRef.current.getBoundingClientRect(); const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1); audioElementRef.current.currentTime = percent * duration; }} ref={progressRef}>
+                <div className="w-full group/progress cursor-pointer" onClick={(e) => { if (!progressRef.current || !audioElementRef.current) return; if (!Number.isFinite(duration) || duration <= 0) return; const rect = progressRef.current.getBoundingClientRect(); const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1); audioElementRef.current.currentTime = percent * duration; }} ref={progressRef}>
                     <div className="flex justify-between text-xs text-gray-500 font-mono mb-1" dir="ltr"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
                     <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden relative" dir="ltr">
                         <div className="absolute top-0 left-0 h-full transition-all duration-300 relative" style={{ width: `${(currentTime / duration) * 100 || 0}%`, backgroundColor: activeVisColor }}></div>
@@ -739,7 +807,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         onVisUpdate={setVisualizerConfig}
       />
 
-      <ConfirmationModal isOpen={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} onConfirm={() => { const toDelete = trackToDelete ? new Set([trackToDelete]) : selectedTrackIds; if (toDelete.size === 0) return; const currentId = playlist[currentTrackIndex]?.id; const isCurrentDeleted = currentId && toDelete.has(currentId); let shift = 0; if (currentTrackIndex !== -1 && !isCurrentDeleted) { for (let i = 0; i < currentTrackIndex; i++) if (toDelete.has(playlist[i].id)) shift++; } playlist.forEach(p => { if (toDelete.has(p.id) && p.onlineId) delete onlineMappedRef.current[p.onlineId]; }); if (isCurrentDeleted) setOnlineSession(null); setPlaylist(prev => prev.filter(t => !toDelete.has(t.id))); if (isCurrentDeleted) { setIsPlaying(false); setCurrentTrackIndex(-1); if (audioElementRef.current) audioElementRef.current.pause(); } else if (shift > 0) setCurrentTrackIndex(prev => prev - shift); setTrackToDelete(null); setSelectedTrackIds(new Set()); setDeleteConfirmOpen(false); setIsSelectionMode(false); }} title={t('confirmTitle')} description={t('confirmBody').replace('{count}', String(tracksToDeleteCount))} confirmText={t('confirmDelete')} cancelText={t('cancel')} count={tracksToDeleteCount} />
+      <ConfirmationModal isOpen={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} onConfirm={confirmDeleteTracks} title={t('confirmTitle')} description={t('confirmBody').replace('{count}', String(tracksToDeleteCount))} confirmText={t('confirmDelete')} cancelText={t('cancel')} count={tracksToDeleteCount} />
       <MusicDetailsModal track={detailsTrack} isOpen={isMusicDetailsOpen} onClose={() => setIsMusicDetailsOpen(false)} onSave={handleTrackUpdate} />
     </div>
   );

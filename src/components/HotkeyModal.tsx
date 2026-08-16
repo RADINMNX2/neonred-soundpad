@@ -26,6 +26,12 @@ const HotkeyModal: React.FC<HotkeyModalProps> = ({ sound, isOpen, onClose, onSav
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Allow closing via Escape if purely pressing Escape with no modifiers
+      if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        onClose();
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
 
@@ -39,13 +45,6 @@ const HotkeyModal: React.FC<HotkeyModalProps> = ({ sound, isOpen, onClose, onSav
           return;
       }
       
-      // Allow closing via Escape if purely pressing Escape with no modifiers,
-      // BUT if we want to allow binding Escape, we should check context.
-      // Usually Escape cancels the modal.
-      if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-          return; 
-      }
-
       const modifiers: string[] = [];
       if (e.ctrlKey) modifiers.push('CommandOrControl');
       if (e.shiftKey) modifiers.push('Shift');
@@ -80,7 +79,7 @@ const HotkeyModal: React.FC<HotkeyModalProps> = ({ sound, isOpen, onClose, onSav
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   const handleSave = () => {
     if (sound) {

@@ -1,5 +1,4 @@
-
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Page } from '../types';
 
 interface SmartCoreState {
@@ -21,6 +20,11 @@ export const SmartCoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const frameCount = useRef(0);
   const lastTime = useRef(performance.now());
   const rafId = useRef<number | null>(null);
+  const isLowPowerModeRef = useRef(false);
+
+  useEffect(() => {
+    isLowPowerModeRef.current = isLowPowerMode;
+  }, [isLowPowerMode]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -51,11 +55,11 @@ export const SmartCoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Only update state once every second to save CPU
       if (now - lastTime.current >= 1000) {
         const currentFps = frameCount.current;
-        setFps(currentFps);
+        setFps(prev => (prev === currentFps ? prev : currentFps));
         
         // AI Optimization Decision
-        if (currentFps < 35 && !isLowPowerMode) setIsLowPowerMode(true);
-        else if (currentFps > 50 && isLowPowerMode) setIsLowPowerMode(false);
+        if (currentFps < 35 && !isLowPowerModeRef.current) setIsLowPowerMode(true);
+        else if (currentFps > 50 && isLowPowerModeRef.current) setIsLowPowerMode(false);
 
         frameCount.current = 0;
         lastTime.current = now;
@@ -75,18 +79,20 @@ export const SmartCoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, []);
 
-  const reportActivity = (page: Page) => {
+  const reportActivity = useCallback((page: Page) => {
     if (page !== activePage) setActivePage(page);
-  };
+  }, [activePage]);
+
+  const value = useMemo(() => ({
+    isBackground,
+    isLowPowerMode,
+    activePage,
+    fps,
+    reportActivity,
+  }), [isBackground, isLowPowerMode, activePage, fps, reportActivity]);
 
   return (
-    <SmartCoreContext.Provider value={{ 
-      isBackground, 
-      isLowPowerMode, 
-      activePage, 
-      fps,
-      reportActivity 
-    }}>
+    <SmartCoreContext.Provider value={value}>
       {children}
     </SmartCoreContext.Provider>
   );

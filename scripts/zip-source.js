@@ -1,4 +1,3 @@
-
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
@@ -14,12 +13,18 @@ const archive = archiver('zip', {
   zlib: { level: 9 } // Sets the compression level.
 });
 
+output.on('error', function(err) {
+  console.error('Failed to write source.zip:', err.message);
+  process.exit(1);
+});
+
 output.on('close', function() {
   console.log('📦 Source code zipped successfully: ' + archive.pointer() + ' total bytes');
 });
 
 archive.on('error', function(err) {
-  throw err;
+  console.error('Archive error:', err.message);
+  process.exit(1);
 });
 
 archive.pipe(output);
@@ -27,12 +32,25 @@ archive.pipe(output);
 // Files to include
 const rootDir = path.join(__dirname, '..');
 
+function addFileIfExists(relPath, name) {
+    const abs = path.join(rootDir, relPath);
+    if (!fs.existsSync(abs)) {
+        console.warn('Skipping missing file: ' + relPath);
+        return;
+    }
+    archive.file(abs, { name: name || relPath });
+}
+
 // Add specific files from root
-archive.file(path.join(rootDir, 'package.json'), { name: 'package.json' });
-archive.file(path.join(rootDir, 'main.js'), { name: 'main.js' });
-archive.file(path.join(rootDir, 'preload.js'), { name: 'preload.js' });
-archive.file(path.join(rootDir, 'tsconfig.json'), { name: 'tsconfig.json' }); // If exists
-archive.file(path.join(rootDir, 'tailwind.config.js'), { name: 'tailwind.config.js' });
+addFileIfExists('package.json');
+addFileIfExists('main.js');
+addFileIfExists('preload.js');
+addFileIfExists('tsconfig.json'); // If exists
+addFileIfExists('tailwind.config.js');
+addFileIfExists('spatiflac-extension-runtime.js');
+addFileIfExists('sflx-http-worker.js');
+addFileIfExists('sflx-extension-worker.js');
+addFileIfExists('README.md');
 
 // Add Directories
 archive.directory(path.join(rootDir, 'src/'), 'src');

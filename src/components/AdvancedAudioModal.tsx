@@ -14,6 +14,18 @@ interface AdvancedAudioModalProps {
 const AdvancedAudioModal: React.FC<AdvancedAudioModalProps> = ({ isOpen, onClose, settings, onUpdate }) => {
   const { t, isRTL } = useLanguage();
 
+  const BORDER_CLASSES: Record<string, string> = {
+    'orange-500': 'border-orange-500',
+    'blue-500': 'border-blue-500',
+    'purple-500': 'border-purple-500',
+  };
+
+  const BG_CLASSES: Record<string, string> = {
+    'orange-500': 'bg-orange-500',
+    'blue-500': 'bg-blue-500',
+    'purple-500': 'bg-purple-500',
+  };
+
   if (!isOpen) return null;
 
   const toggleSetting = (key: keyof MicEqSettings) => {
@@ -42,7 +54,7 @@ const AdvancedAudioModal: React.FC<AdvancedAudioModalProps> = ({ isOpen, onClose
       className={`
         relative w-full p-4 rounded-2xl border transition-all duration-300 flex items-center gap-4 group overflow-hidden
         ${active 
-          ? `bg-black border-${colorClass} shadow-[0_0_20px_rgba(0,0,0,0.5)]` 
+          ? `bg-black ${BORDER_CLASSES[colorClass] || 'border-white/20'} shadow-[0_0_20px_rgba(0,0,0,0.5)]` 
           : 'bg-zinc-900/50 border-white/5 hover:bg-zinc-800'
         }
       `}
@@ -53,7 +65,7 @@ const AdvancedAudioModal: React.FC<AdvancedAudioModalProps> = ({ isOpen, onClose
       {/* Icon Box */}
       <div className={`
         w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-all
-        ${active ? `bg-${colorClass} text-white shadow-lg` : 'bg-white/5 text-gray-500'}
+        ${active ? `${BG_CLASSES[colorClass] || 'bg-zinc-500'} text-white shadow-lg` : 'bg-white/5 text-gray-500'}
       `}>
          <Icon size={24} />
       </div>
@@ -67,7 +79,7 @@ const AdvancedAudioModal: React.FC<AdvancedAudioModalProps> = ({ isOpen, onClose
       {/* Switch Indicator */}
       <div className={`
         absolute ${isRTL ? 'left-4' : 'right-4'} w-12 h-6 rounded-full p-1 transition-colors
-        ${active ? `bg-${colorClass}` : 'bg-zinc-700'}
+        ${active ? `${BG_CLASSES[colorClass] || 'bg-zinc-700'}` : 'bg-zinc-700'}
       `}>
         <div className={`
           w-4 h-4 rounded-full bg-white shadow-md transition-transform duration-300

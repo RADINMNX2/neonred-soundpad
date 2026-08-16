@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Mic2, Radio, Headphones, Volume2, RefreshCw, Monitor, Download, ShieldCheck, Waves, Zap, ChevronDown, Globe, HelpCircle, Sliders, Heart, Mail, MessageCircle, Code, FileJson, Check, Sparkles, Plug, Cpu, Store, Plus, Trash2, AlertTriangle, Loader2, Package } from 'lucide-react';
 import { AudioDevice, MicEqSettings, SpatiflacExtension } from '../types';
 import MicSettingModal from '../components/MicSettingModal';
@@ -71,6 +71,11 @@ const Settings: React.FC<SettingsProps> = ({
   const [startWithWindows, setStartWithWindows] = useState(() => localStorage.getItem('startWithWindows') === 'true');
   const [minimizeToTray, setMinimizeToTray] = useState(() => localStorage.getItem('minimizeToTray') === 'true');
   const [sourceDownloadStatus, setSourceDownloadStatus] = useState<'idle' | 'downloading' | 'success'>('idle');
+  const sourceStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (sourceStatusTimeoutRef.current) { clearTimeout(sourceStatusTimeoutRef.current); sourceStatusTimeoutRef.current = null; }
+  }, []);
 
   const [spatiflacExts, setSpatiflacExts] = useState<SpatiflacExtension[]>(() => loadExtensions());
 
@@ -115,23 +120,35 @@ const Settings: React.FC<SettingsProps> = ({
   const handleInstallExt = async (ext: SpatiflacExtension) => {
     setStoreBusyId(ext.id);
     setStoreInstallError(null);
-    const result = await installExtensionPackage(ext);
-    setStoreBusyId(null);
-    if (!result.success) {
-      setStoreInstallError(result.error || 'Install failed');
-      return;
+    try {
+      const result = await installExtensionPackage(ext);
+      if (!result.success) {
+        setStoreInstallError(result.error || 'Install failed');
+        return;
+      }
+      setStoreInstalledIds(prev => [...prev.filter(id => id !== ext.id), ext.id]);
+      window.dispatchEvent(new CustomEvent(EXTENSIONS_CHANGED_EVENT));
+    } catch (err) {
+      console.error("Failed to install extension", err);
+      setStoreInstallError(err instanceof Error ? err.message : 'Install failed');
+    } finally {
+      setStoreBusyId(null);
     }
-    setStoreInstalledIds(prev => [...prev.filter(id => id !== ext.id), ext.id]);
-    window.dispatchEvent(new CustomEvent(EXTENSIONS_CHANGED_EVENT));
   };
 
   const handleUninstallExt = async (ext: SpatiflacExtension) => {
     setStoreBusyId(ext.id);
     setStoreInstallError(null);
-    await uninstallExtensionPackage(ext);
-    setStoreBusyId(null);
-    setStoreInstalledIds(prev => prev.filter(pid => pid !== ext.id));
-    window.dispatchEvent(new CustomEvent(EXTENSIONS_CHANGED_EVENT));
+    try {
+      await uninstallExtensionPackage(ext);
+      setStoreInstalledIds(prev => prev.filter(pid => pid !== ext.id));
+      window.dispatchEvent(new CustomEvent(EXTENSIONS_CHANGED_EVENT));
+    } catch (err) {
+      console.error("Failed to uninstall extension", err);
+      setStoreInstallError(err instanceof Error ? err.message : 'Uninstall failed');
+    } finally {
+      setStoreBusyId(null);
+    }
   };
 
   useEffect(() => {
@@ -169,11 +186,12 @@ const Settings: React.FC<SettingsProps> = ({
 
   const handleGetSource = async () => {
     if (window.electronAPI) {
+      if (sourceStatusTimeoutRef.current) { clearTimeout(sourceStatusTimeoutRef.current); sourceStatusTimeoutRef.current = null; }
       setSourceDownloadStatus('downloading');
       const result = await window.electronAPI.saveSourceCode();
       if (result.success) {
         setSourceDownloadStatus('success');
-        setTimeout(() => setSourceDownloadStatus('idle'), 3000);
+        sourceStatusTimeoutRef.current = setTimeout(() => { sourceStatusTimeoutRef.current = null; setSourceDownloadStatus('idle'); }, 3000);
       } else {
         setSourceDownloadStatus('idle');
       }
@@ -207,8 +225,8 @@ const Settings: React.FC<SettingsProps> = ({
         <section className="bg-zinc-900/50 border border-white/5 rounded-2xl p-6 backdrop-blur-md mb-8">
             <div className="flex items-center gap-4 mb-4"><div className="p-3 bg-white/5 rounded-xl"><Monitor size={24} className="text-white" /></div><div><h3 className="text-xl font-semibold text-white font-persian">{t('sysIntegration')}</h3><p className="text-sm text-gray-400 font-persian">{t('sysIntegrationDesc')}</p></div></div>
             <div className="flex flex-col gap-4">
-                <label className="flex items-center justify-between p-4 bg-black/40 rounded-xl cursor-pointer hover:bg-black/60 transition-colors"><div className="flex items-center gap-3"><Download size={20} className="text-gray-400" /><span className="text-white font-medium font-persian">{t('startWindows')}</span></div><div className={`w-12 h-6 rounded-full p-1 transition-colors ${startWithWindows ? 'bg-red-600' : 'bg-gray-700'}`} onClick={(e) => { e.preventDefault(); toggleStartWithWindows(); }}><div className={`w-4 h-4 rounded-full bg-white transition-transform ${startWithWindows ? (isRTL ? '-translate-x-6' : 'translate-x-6') : 'translate-x-0'}`}></div></div></label>
-                <label className="flex items-center justify-between p-4 bg-black/40 rounded-xl cursor-pointer hover:bg-black/60 transition-colors"><div className="flex items-center gap-3"><Monitor size={20} className="text-gray-400" /><span className="text-white font-medium font-persian">{t('minToTray')}</span></div><div className={`w-12 h-6 rounded-full p-1 transition-colors ${minimizeToTray ? 'bg-red-600' : 'bg-gray-700'}`} onClick={(e) => { e.preventDefault(); toggleMinimizeToTray(); }}><div className={`w-4 h-4 rounded-full bg-white transition-transform ${minimizeToTray ? (isRTL ? '-translate-x-6' : 'translate-x-6') : 'translate-x-0'}`}></div></div></label>
+                <label onClick={toggleStartWithWindows} className="flex items-center justify-between p-4 bg-black/40 rounded-xl cursor-pointer hover:bg-black/60 transition-colors"><div className="flex items-center gap-3"><Download size={20} className="text-gray-400" /><span className="text-white font-medium font-persian">{t('startWindows')}</span></div><div className={`w-12 h-6 rounded-full p-1 transition-colors ${startWithWindows ? 'bg-red-600' : 'bg-gray-700'}`} onClick={(e) => { e.preventDefault(); }}><div className={`w-4 h-4 rounded-full bg-white transition-transform ${startWithWindows ? (isRTL ? '-translate-x-6' : 'translate-x-6') : 'translate-x-0'}`}></div></div></label>
+                <label onClick={toggleMinimizeToTray} className="flex items-center justify-between p-4 bg-black/40 rounded-xl cursor-pointer hover:bg-black/60 transition-colors"><div className="flex items-center gap-3"><Monitor size={20} className="text-gray-400" /><span className="text-white font-medium font-persian">{t('minToTray')}</span></div><div className={`w-12 h-6 rounded-full p-1 transition-colors ${minimizeToTray ? 'bg-red-600' : 'bg-gray-700'}`} onClick={(e) => { e.preventDefault(); }}><div className={`w-4 h-4 rounded-full bg-white transition-transform ${minimizeToTray ? (isRTL ? '-translate-x-6' : 'translate-x-6') : 'translate-x-0'}`}></div></div></label>
             </div>
         </section>
 

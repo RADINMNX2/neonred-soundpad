@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { X, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -21,6 +21,10 @@ const TourOverlay: React.FC<TourOverlayProps> = ({ steps, isOpen, onClose, onSte
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
 
+  const timeoutsRef = useRef<number[]>([]);
+  const onStepChangeRef = useRef(onStepChange);
+  onStepChangeRef.current = onStepChange;
+
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(0);
@@ -28,10 +32,10 @@ const TourOverlay: React.FC<TourOverlayProps> = ({ steps, isOpen, onClose, onSte
   }, [isOpen]);
 
   useEffect(() => {
-    if (onStepChange) {
-      onStepChange(currentStep);
+    if (onStepChangeRef.current) {
+      onStepChangeRef.current(currentStep);
     }
-  }, [currentStep, onStepChange]);
+  }, [currentStep]);
 
   // Update target rect when step changes or resize
   const updateRect = () => {
@@ -39,18 +43,18 @@ const TourOverlay: React.FC<TourOverlayProps> = ({ steps, isOpen, onClose, onSte
     if (!step) return;
     
     // Slight delay to allow DOM updates (page switching)
-    setTimeout(() => {
+    timeoutsRef.current.push(window.setTimeout(() => {
         const element = document.getElementById(step.targetId);
         if (element) {
           setTargetRect(element.getBoundingClientRect());
         } else {
             // If element not found immediately, retry once more after a longer delay (animation frame)
-            setTimeout(() => {
+            timeoutsRef.current.push(window.setTimeout(() => {
                  const el = document.getElementById(step.targetId);
                  if (el) setTargetRect(el.getBoundingClientRect());
-            }, 300);
+            }, 300));
         }
-    }, 100);
+    }, 100));
   };
 
   useLayoutEffect(() => {
@@ -60,6 +64,13 @@ const TourOverlay: React.FC<TourOverlayProps> = ({ steps, isOpen, onClose, onSte
       return () => window.removeEventListener('resize', updateRect);
     }
   }, [currentStep, isOpen, steps]);
+
+  useEffect(() => {
+    return () => {
+      timeoutsRef.current.forEach(id => clearTimeout(id));
+      timeoutsRef.current = [];
+    };
+  }, []);
 
   if (!isOpen) return null;
 

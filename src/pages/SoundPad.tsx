@@ -45,13 +45,29 @@ const SoundPad: React.FC<SoundPadProps> = ({
   // --- STATE ---
   const [sounds, setSounds] = useState<SoundEffect[]>(() => {
     const saved = localStorage.getItem('soundpad_sounds');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch (err) {
+      console.error("Error parsing soundpad_sounds", err);
+      return [];
+    }
   });
 
   const soundsRef = useRef(sounds);
   useEffect(() => {
     soundsRef.current = sounds;
-    localStorage.setItem('soundpad_sounds', JSON.stringify(sounds));
+    try {
+      localStorage.setItem('soundpad_sounds', JSON.stringify(sounds));
+    } catch (err) {
+      console.warn("Sound persistence failed (quota exceeded?), retrying without album art", err);
+      try {
+        const withoutImages = sounds.map(s => ({ ...s, image: undefined }));
+        localStorage.setItem('soundpad_sounds', JSON.stringify(withoutImages));
+      } catch (err2) {
+        console.error("Could not persist sounds", err2);
+      }
+    }
   }, [sounds]);
 
   const [playingIds, setPlayingIds] = useState<Set<string>>(new Set());
@@ -97,6 +113,14 @@ const SoundPad: React.FC<SoundPadProps> = ({
   const compressorRef = useRef<DynamicsCompressorNode | null>(null);
   const micDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const micAudioElementRef = useRef<ExtendedAudioElement | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+
+  // Untracked timeouts (highlight, etc.) cleared on unmount
+  const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => {
+    timeoutRefs.current.forEach(t => clearTimeout(t));
+    timeoutRefs.current = [];
+  }, []);
 
   // --- SHORTCUTS ---
   useEffect(() => {
@@ -211,9 +235,10 @@ const SoundPad: React.FC<SoundPadProps> = ({
     if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
         setHighlightedSoundId(null);
     }, 2000);
+    timeoutRefs.current.push(timeout);
   };
 
   // --- CORE PLAYBACK ---
@@ -327,13 +352,18 @@ const SoundPad: React.FC<SoundPadProps> = ({
         promises.push(injectorAudio.play());
       }
       await Promise.all(promises);
+      // Guard: sound may have been stopped while awaiting play
+      if (!activeAudioMap.current.has(id)) return;
       setPlayingIds((prev) => new Set(prev).add(id));
       
       // Final Safety Check
       monitorAudio.muted = isDeafenedRef.current;
       if (injectorAudio) injectorAudio.muted = !(!isMicMutedRef.current && injectorDeviceId);
 
-    } catch (e) { console.error("Playback failed", e); }
+    } catch (e) { 
+      console.error("Playback failed", e); 
+      stopSound(id);
+    }
   }, [monitorDeviceId, injectorDeviceId, masterVolume, stopSound, stopAll]); 
 
   // --- SHORTCUT LISTENER ---
@@ -366,25 +396,37 @@ const SoundPad: React.FC<SoundPadProps> = ({
         micAudioElementRef.current.pause();
         micAudioElementRef.current.srcObject = null;
       }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
     };
   }, []);
 
   // --- MIC PASSTHROUGH ---
   useEffect(() => {
     let isActive = true;
+
+    const teardownMicChain = () => {
+      if (micSourceRef.current) { try { micSourceRef.current.disconnect(); } catch (e) {} micSourceRef.current = null; }
+      if (micGainNodeRef.current) { try { micGainNodeRef.current.disconnect(); } catch (e) {} micGainNodeRef.current = null; }
+      if (clarityFilterRef.current) { try { clarityFilterRef.current.disconnect(); } catch (e) {} clarityFilterRef.current = null; }
+      if (compressorRef.current) { try { compressorRef.current.disconnect(); } catch (e) {} compressorRef.current = null; }
+      if (micDestRef.current) { try { micDestRef.current.disconnect(); } catch (e) {} micDestRef.current = null; }
+      if (micAudioElementRef.current) { micAudioElementRef.current.pause(); micAudioElementRef.current.srcObject = null; micAudioElementRef.current = null; }
+      if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null; }
+    };
+
     const setupMicPassthrough = async () => {
-      if (!injectorDeviceId || !audioContextRef.current) return;
+      // Always tear down the existing chain first, even when disabling (None selected)
+      teardownMicChain();
+
       const ctx = audioContextRef.current;
+      if (!ctx) return;
+      if (!injectorDeviceId) return;
       if (ctx.state === 'suspended') await ctx.resume();
 
       try {
-        if (micSourceRef.current) { micSourceRef.current.disconnect(); micSourceRef.current = null; }
-        if (micGainNodeRef.current) { micGainNodeRef.current.disconnect(); micGainNodeRef.current = null; }
-        if (clarityFilterRef.current) { clarityFilterRef.current.disconnect(); clarityFilterRef.current = null; }
-        if (compressorRef.current) { compressorRef.current.disconnect(); compressorRef.current = null; }
-        if (micDestRef.current) { micDestRef.current.disconnect(); micDestRef.current = null; }
-        if (micAudioElementRef.current) { micAudioElementRef.current.pause(); micAudioElementRef.current.srcObject = null; micAudioElementRef.current = null; }
-        
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId: micInputDeviceId === 'default' ? undefined : { exact: micInputDeviceId },
@@ -397,7 +439,8 @@ const SoundPad: React.FC<SoundPadProps> = ({
           } as any
         });
 
-        if (!isActive) return;
+        if (!isActive) { stream.getTracks().forEach(t => t.stop()); return; }
+        micStreamRef.current = stream;
 
         const source = ctx.createMediaStreamSource(stream);
         micSourceRef.current = source;
@@ -469,11 +512,11 @@ const SoundPad: React.FC<SoundPadProps> = ({
         
         outputAudio.play().catch(console.warn);
 
-      } catch (err) {}
+      } catch (err) { console.warn("Mic passthrough setup failed", err); }
     };
 
     setupMicPassthrough();
-    return () => { isActive = false; };
+    return () => { isActive = false; teardownMicChain(); };
   }, [injectorDeviceId, micInputDeviceId, micEqSettings.noiseSuppression, micEqSettings.echoCancellation, micEqSettings.compressor]);
 
   // Real-time gain updates for Mic EQ
@@ -533,6 +576,38 @@ const SoundPad: React.FC<SoundPadProps> = ({
     });
   }, [isMicMuted, isDeafened, masterVolume, injectorDeviceId]);
 
+  // Downscale artwork data URL to max 256x256 to avoid blowing localStorage quota
+  const getCappedArtwork = async (file: File): Promise<string | undefined> => {
+    const art = await extractAlbumArt(file);
+    if (!art) return undefined;
+    try {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Artwork load failed'));
+        img.src = art;
+      });
+      const max = 256;
+      let w = img.width;
+      let h = img.height;
+      if (w > max || h > max) {
+        const scale = max / Math.max(w, h);
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return undefined;
+      ctx.drawImage(img, 0, 0, w, h);
+      return canvas.toDataURL('image/jpeg', 0.8);
+    } catch (err) {
+      console.warn("Could not downscale artwork", err);
+      return undefined;
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
@@ -546,13 +621,13 @@ const SoundPad: React.FC<SoundPadProps> = ({
            try {
              finalPath = await window.electronAPI.saveSoundFile(originalPath);
              url = `file://${finalPath}`;
-           } catch (err) { url = `file://${originalPath}`; }
+           } catch (err) { url = typeof originalPath === 'string' ? `file://${originalPath}` : ''; }
         } else {
           url = await fileToBase64(file);
         }
         
-        // Extract album art OR video frame
-        const mediaArt = await extractAlbumArt(file);
+        // Extract album art OR video frame (capped to 256px for persistence)
+        const mediaArt = await getCappedArtwork(file);
         
         newSounds.push({
           id: crypto.randomUUID(),
@@ -567,6 +642,8 @@ const SoundPad: React.FC<SoundPadProps> = ({
       }
       setSounds((prev) => [...prev, ...newSounds]);
     }
+    // Reset so selecting the same file again re-fires onChange
+    event.target.value = '';
   };
 
   const updateSoundVolume = (id: string, vol: number) => {
@@ -588,6 +665,8 @@ const SoundPad: React.FC<SoundPadProps> = ({
   const handleSeek = (id: string, time: number) => {
     const pair = activeAudioMap.current.get(id);
     if (pair && Number.isFinite(time)) {
+        const duration = pair.monitor.duration;
+        if (!Number.isFinite(duration) || duration <= 0) return;
         pair.monitor.currentTime = time;
         if (pair.injector) pair.injector.currentTime = time;
         setPlaybackState(prev => ({ ...prev, currentTime: time }));

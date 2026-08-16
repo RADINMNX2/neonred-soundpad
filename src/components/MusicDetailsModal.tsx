@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Copy, Music, Disc, User, Check, Mic2 } from 'lucide-react';
 import { MusicTrack } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -16,16 +16,25 @@ const MusicDetailsModal: React.FC<MusicDetailsModalProps> = ({ track, isOpen, on
   const [editedTitle, setEditedTitle] = useState('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  const copyTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (track) {
       setEditedTitle(track.title);
     }
   }, [track]);
 
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
   const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => setCopiedField(null), 2000);
   };
 
   const handleSave = () => {

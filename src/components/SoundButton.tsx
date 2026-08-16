@@ -161,15 +161,30 @@ const SoundButton: React.FC<SoundButtonProps> = memo(({
     </div>
   );
 }, (prevProps, nextProps) => {
+  const a = prevProps.sound;
+  const b = nextProps.sound;
   return (
-    prevProps.sound.id === nextProps.sound.id &&
-    prevProps.sound.name === nextProps.sound.name &&
-    prevProps.sound.image === nextProps.sound.image &&
-    prevProps.sound.isFavorite === nextProps.sound.isFavorite &&
+    a.id === b.id &&
+    a.name === b.name &&
+    a.url === b.url &&
+    a.path === b.path &&
+    a.color === b.color &&
+    a.volume === b.volume &&
+    a.shortcut === b.shortcut &&
+    a.duration === b.duration &&
+    a.image === b.image &&
+    a.isFavorite === b.isFavorite &&
+    a.trimStart === b.trimStart &&
+    a.trimEnd === b.trimEnd &&
     prevProps.isPlaying === nextProps.isPlaying &&
     prevProps.isSelectionMode === nextProps.isSelectionMode &&
     prevProps.isSelected === nextProps.isSelected &&
-    prevProps.isHighlighted === nextProps.isHighlighted
+    prevProps.isHighlighted === nextProps.isHighlighted &&
+    prevProps.onPlay === nextProps.onPlay &&
+    prevProps.onStop === nextProps.onStop &&
+    prevProps.onOpenDetails === nextProps.onOpenDetails &&
+    prevProps.onToggleSelect === nextProps.onToggleSelect &&
+    prevProps.innerRef === nextProps.innerRef
   );
 });
 

@@ -62,26 +62,44 @@ function ensureHttpWorker() {
 
 function httpGet(url, headers) {
   return new Promise((resolve, reject) => {
-    const mod = /^http:/.test(url) ? require('http') : https;
-    const req = mod.get(url, { headers: headers || {} }, (res) => {
-      const status = res.statusCode || 0;
-      if (status >= 300 && status < 400 && res.headers.location) {
-        res.resume();
-        return reject(new Error('Redirect not followed'));
-      }
-      const chunks = [];
-      res.on('data', (c) => chunks.push(c));
-      res.on('end', () => {
-        let body = Buffer.concat(chunks);
-        const enc = String(res.headers['content-encoding'] || '').toLowerCase();
-        if (enc === 'gzip' || enc === 'deflate') {
-          try { body = enc === 'gzip' ? zlib.gunzipSync(body) : zlib.inflateSync(body); } catch (e) {}
+    let redirects = 0;
+    const attempt = (u) => {
+      const mod = /^http:/.test(u) ? require('http') : https;
+      const req = mod.get(u, { headers: headers || {} }, (res) => {
+        const status = res.statusCode || 0;
+        if (status >= 300 && status < 400 && res.headers.location) {
+          res.resume();
+          if (redirects >= 5) return reject(new Error('Too many redirects'));
+          redirects++;
+          try {
+            return attempt(new URL(res.headers.location, u).toString());
+          } catch (e) {
+            return reject(new Error('Invalid redirect location'));
+          }
         }
-        resolve({ statusCode: status, headers: res.headers, body });
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('error', (e) => {
+          clearTimeout(timer);
+          reject(e);
+        });
+        res.on('end', () => {
+          clearTimeout(timer);
+          let body = Buffer.concat(chunks);
+          const enc = String(res.headers['content-encoding'] || '').toLowerCase();
+          if (enc === 'gzip' || enc === 'deflate') {
+            try { body = enc === 'gzip' ? zlib.gunzipSync(body) : zlib.inflateSync(body); } catch (e) {}
+          }
+          resolve({ statusCode: status, headers: res.headers, body });
+        });
       });
-    });
-    req.on('error', reject);
-    req.setTimeout(60000, () => req.destroy(new Error('Request timeout')));
+      req.on('error', (e) => {
+        clearTimeout(timer);
+        reject(e);
+      });
+      const timer = req.setTimeout(120000, () => req.destroy(new Error('Request timeout')));
+    };
+    attempt(url);
   });
 }
 
@@ -224,14 +242,30 @@ function runExtensionCall(packageId, callType, args, opts) {
     const workDir = path.join(workRoot(), packageId + '-' + crypto.randomUUID().slice(0, 8));
     try { fs.mkdirSync(workDir, { recursive: true }); } catch (e2) {}
 
-    const worker = new Worker(workerScriptPath('sflx-extension-worker.js'), {
+    let settled = false;
+    let worker = null;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { if (worker) worker.terminate(); } catch (e3) {}
+      if (e.keepWorkDir) {
+        resolve({ ...value, workDir });
+      } else {
+        try { fs.rmSync(workDir, { recursive: true, force: true }); } catch (e4) {}
+        resolve(value);
+      }
+    };
+
+    worker = new Worker(workerScriptPath('sflx-extension-worker.js'), {
       workerData: {
         extensionDir,
         callType,
         args,
         workDir,
-        appVersion: app.getVersion ? app.getVersion() : '1.3.3',
+        appVersion: require('./package.json').version,
         requestId: 1,
+        httpTimeoutMs: 60000,
         ctrlSab: _ctrlSab,
         reqSab: _reqSab,
         respSab: _respSab
@@ -239,9 +273,7 @@ function runExtensionCall(packageId, callType, args, opts) {
     });
 
     const timer = setTimeout(() => {
-      try { worker.terminate(); } catch (e3) {}
-      try { fs.rmSync(workDir, { recursive: true, force: true }); } catch (e4) {}
-      resolve({ ok: false, error: 'Extension call timed out', timedOut: true });
+      settle({ ok: false, error: 'Extension call timed out', timedOut: true });
     }, timeoutMs);
 
     worker.on('message', (msg) => {
@@ -249,24 +281,20 @@ function runExtensionCall(packageId, callType, args, opts) {
         if (e.onProgress) e.onProgress(msg.progress);
         return;
       }
-      clearTimeout(timer);
-      try { worker.terminate(); } catch (e3) {}
-      if (e.keepWorkDir) {
-        resolve({ ok: msg.ok, result: msg.result, error: msg.error, workDir });
-      } else {
-        try { fs.rmSync(workDir, { recursive: true, force: true }); } catch (e4) {}
-        resolve({ ok: msg.ok, result: msg.result, error: msg.error });
-      }
+      settle({ ok: msg.ok, result: msg.result, error: msg.error });
     });
 
     worker.on('error', (err) => {
-      clearTimeout(timer);
-      try { worker.terminate(); } catch (e3) {}
-      try { fs.rmSync(workDir, { recursive: true, force: true }); } catch (e4) {}
-      resolve({ ok: false, error: err && err.message ? err.message : String(err) });
+      settle({ ok: false, error: err && err.message ? err.message : String(err) });
     });
 
-    worker.on('exit', () => {});
+    worker.on('exit', (code) => {
+      setTimeout(() => {
+        if (!settled) {
+          settle({ ok: false, error: 'Extension worker exited unexpectedly (code ' + code + ')' });
+        }
+      }, 0);
+    });
   });
 }
 

@@ -31,8 +31,13 @@ const DeviceSelectorModal: React.FC<DeviceSelectorModalProps> = ({
   // Combine custom options (like "Default" or "None") with real devices
   const allOptions = [
     ...customOptions,
-    ...devices.map(d => ({ deviceId: d.deviceId, label: d.label || `Unknown Device (${d.deviceId.slice(0,5)}...)` }))
+    ...devices.map(d => ({ deviceId: d.deviceId, label: d.label || `Unknown Device (${d.deviceId?.slice(0, 5) || '?'}...)` }))
   ];
+
+  const SELECTED_CLASSES = {
+    input: 'bg-purple-900/20 border-purple-500/50',
+    output: 'bg-red-900/20 border-red-500/50',
+  };
 
   const filteredDevices = allOptions.filter(d => 
     d.label.toLowerCase().includes(searchTerm.toLowerCase())
@@ -100,7 +105,7 @@ const DeviceSelectorModal: React.FC<DeviceSelectorModalProps> = ({
                   className={`
                     w-full flex items-center justify-between p-4 rounded-xl border transition-all duration-200 group
                     ${isSelected 
-                      ? `bg-${type === 'input' ? 'purple' : 'red'}-900/20 border-${type === 'input' ? 'purple' : 'red'}-500/50` 
+                      ? SELECTED_CLASSES[type] 
                       : 'bg-zinc-800/30 border-white/5 hover:bg-zinc-800 hover:border-white/10'
                     }
                   `}

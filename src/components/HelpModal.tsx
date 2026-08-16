@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, ArrowRight, ArrowLeft, Download, Check, Monitor, Mic2, Radio, ChevronDown, Package, Zap, Cpu, Scan, AlertTriangle, Settings2, Gamepad2, SlidersHorizontal, Lightbulb, MessageCircle } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { AudioDevice } from '../types';
@@ -38,6 +38,8 @@ const HelpModal: React.FC<HelpModalProps> = ({
     monitor: AudioDevice | null;
   }>({ mic: null, injector: null, monitor: null });
 
+  const scanTimerRef = useRef<number | null>(null);
+
   // Reset step when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -45,6 +47,12 @@ const HelpModal: React.FC<HelpModalProps> = ({
       setInstallStatus('idle');
       setScanState('idle');
     }
+    return () => {
+      if (scanTimerRef.current) {
+        clearTimeout(scanTimerRef.current);
+        scanTimerRef.current = null;
+      }
+    };
   }, [isOpen]);
 
   const handleInstall = async () => {
@@ -66,9 +74,10 @@ const HelpModal: React.FC<HelpModalProps> = ({
 
   const performAutoScan = () => {
     setScanState('scanning');
+    if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
     
     // Simulate complex analysis time
-    setTimeout(() => {
+    scanTimerRef.current = window.setTimeout(() => {
         // 1. Detect Real Mic (Ignore Default, Ignore CABLE Output, Ignore Virtual)
         const bestMic = inputDevices.find(d => 
             d.deviceId !== 'default' && 
@@ -93,6 +102,7 @@ const HelpModal: React.FC<HelpModalProps> = ({
 
         if (bestMic) onOpenSelector('mic');
         
+        scanTimerRef.current = null;
     }, 2000);
   };
 

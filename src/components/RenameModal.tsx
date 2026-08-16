@@ -12,13 +12,18 @@ interface RenameModalProps {
 const RenameModal: React.FC<RenameModalProps> = ({ sound, isOpen, onClose, onSave }) => {
   const [name, setName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isOpen && sound) {
       setName(sound.name);
       // Focus input after animation
-      setTimeout(() => inputRef.current?.focus(), 100);
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+      focusTimerRef.current = window.setTimeout(() => inputRef.current?.focus(), 100);
     }
+    return () => {
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    };
   }, [isOpen, sound]);
 
   const handleSubmit = (e: React.FormEvent) => {

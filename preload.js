@@ -1,6 +1,8 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+const shortcutListeners = new Map();
+
 contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
@@ -16,9 +18,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onShortcutTriggered: (callback) => {
     const subscription = (event, id) => callback(id);
     ipcRenderer.on('shortcut-triggered', subscription);
-    return () => ipcRenderer.removeListener('shortcut-triggered', subscription);
+    shortcutListeners.set(callback, subscription);
+    return () => {
+      if (shortcutListeners.get(callback) === subscription) {
+        shortcutListeners.delete(callback);
+        ipcRenderer.removeListener('shortcut-triggered', subscription);
+      }
+    };
   },
-  removeShortcutListener: () => ipcRenderer.removeAllListeners('shortcut-triggered'),
+  removeShortcutListener: (callback) => {
+    const subscription = shortcutListeners.get(callback);
+    if (subscription) {
+      shortcutListeners.delete(callback);
+      ipcRenderer.removeListener('shortcut-triggered', subscription);
+    }
+  },
 
   // File Handling (Open With)
   onFileOpened: (callback) => {

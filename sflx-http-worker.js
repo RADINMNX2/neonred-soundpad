@@ -70,7 +70,9 @@ function doGet(req, url) {
           }
           const headers = {};
           for (const k of Object.keys(res.headers)) headers[k] = res.headers[k];
-          resolve({ statusCode: status, headers, body: body.toString('utf8'), url: u });
+          const ctype = String(res.headers['content-type'] || '');
+          const isText = /(^text\/|json|xml|javascript|x-www-form-urlencoded|svg)/i.test(ctype);
+          resolve({ statusCode: status, headers, body: isText ? body.toString('utf8') : body.toString('base64'), base64Body: !isText, url: u });
         });
       });
       r.on('error', reject);
@@ -164,6 +166,11 @@ parentPort.on('message', () => {
     const state = Atomics.load(ctrl, 1);
     if (state === STATE_CANCEL) {
       finishRequest();
+      continue;
+    }
+    if (state === STATE_RESPONSE) {
+      Atomics.wait(ctrl, 1, STATE_RESPONSE, 100);
+      if (Atomics.load(ctrl, 1) === STATE_RESPONSE) finishRequest();
       continue;
     }
     if (state !== STATE_REQUEST) continue;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, RotateCcw, Sparkles, Mic2, Radio, Zap, ShieldAlert, Volume2, SlidersHorizontal, Check } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -68,7 +68,8 @@ const Mic10BandEqualizerModal: React.FC<Mic10BandEqualizerModalProps> = ({
   const [activePreset, setActivePreset] = useState<string | null>(null);
 
   // Ensure gains array has length 10
-  const currentGains = gains && gains.length === 10 ? gains : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const fallbackGains = useMemo(() => [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], []);
+  const currentGains = gains && gains.length === 10 ? gains : fallbackGains;
 
   const handleGainChange = (index: number, val: number) => {
     const updated = [...currentGains];

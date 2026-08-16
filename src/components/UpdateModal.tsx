@@ -73,8 +73,8 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
            {isDownloading && progress && (
                <div className="mb-8">
                    <div className="flex justify-between text-xs text-green-400 font-mono mb-2">
-                       <span>{Math.round(progress.percent)}%</span>
-                       <span>{(progress.transferred / 1024 / 1024).toFixed(1)} MB / {(progress.total / 1024 / 1024).toFixed(1)} MB</span>
+<span>{Math.round(progress.percent)}%</span>
+                        <span>{(progress.transferred / 1024 / 1024).toFixed(1)} MB / {progress.total > 0 ? `${(progress.total / 1024 / 1024).toFixed(1)} MB` : '... MB'}</span>
                    </div>
                    <div className="w-full h-3 bg-zinc-800 rounded-full overflow-hidden border border-white/5">
                        <div 

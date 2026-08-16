@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { X, Trash2, Pencil, Check, Folder, Save } from 'lucide-react';
-import { EQProfile } from './EqualizerModal';
+import { X, Trash2, Pencil, Check, Folder, Save, ShieldAlert } from 'lucide-react';
+import { EQProfile, DEFAULT_PROFILE_IDS } from './EqualizerModal';
 
 interface ProfilesModalProps {
   isOpen: boolean;
@@ -22,12 +22,14 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const startEditing = (profile: EQProfile) => {
     setEditingId(profile.id);
     setEditName(profile.name);
+    setErrorMsg(null);
   };
 
   const saveEditing = () => {
@@ -40,6 +42,15 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({
   const cancelEditing = () => {
     setEditingId(null);
     setEditName('');
+  };
+
+  const handleDeleteClick = (profile: EQProfile) => {
+    if (DEFAULT_PROFILE_IDS.includes(profile.id)) {
+      setErrorMsg(`"${profile.name}" is a default profile and cannot be deleted`);
+      return;
+    }
+    setErrorMsg(null);
+    onDelete(profile.id);
   };
 
   return (
@@ -134,7 +145,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({
                                     </button>
                                     {/* Don't allow deleting default profiles if you wanted to protect them, logic here */}
                                     <button 
-                                        onClick={() => onDelete(profile.id)}
+                                        onClick={() => handleDeleteClick(profile)}
                                         className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                                         title="Delete"
                                     >
@@ -150,7 +161,11 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({
         
         {/* Footer info */}
         <div className="p-4 bg-black/20 border-t border-white/5 text-center text-xs text-gray-500 font-mono">
-           {profiles.length} PROFILES SAVED
+           {errorMsg ? (
+             <span className="text-red-400 flex items-center justify-center gap-1.5"><ShieldAlert size={12} />{errorMsg}</span>
+           ) : (
+             `${profiles.length} PROFILES SAVED`
+           )}
         </div>
       </div>
     </div>

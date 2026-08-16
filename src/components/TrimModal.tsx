@@ -19,8 +19,11 @@ const TrimModal: React.FC<TrimModalProps> = ({ sound, isOpen, onClose, onSave, m
   const [end, setEnd] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
   
   const audioRef = useRef<ExtendedAudioElement | null>(null);
+  const startRef = useRef(0);
+  const endRef = useRef(0);
 
   // Initialize Audio
   useEffect(() => {
@@ -29,6 +32,10 @@ const TrimModal: React.FC<TrimModalProps> = ({ sound, isOpen, onClose, onSave, m
       setEnd(sound.trimEnd || 0);
       setDuration(0);
       setCurrentTime(sound.trimStart || 0);
+      setIsPlaying(false);
+      setMetadataLoaded(false);
+      startRef.current = sound.trimStart || 0;
+      endRef.current = sound.trimEnd || 0;
 
       // Create temp audio for preview
       const audio = new Audio(sound.url) as ExtendedAudioElement;
@@ -43,15 +50,18 @@ const TrimModal: React.FC<TrimModalProps> = ({ sound, isOpen, onClose, onSave, m
         setDuration(audio.duration);
         if (!sound.trimEnd || sound.trimEnd > audio.duration) {
           setEnd(audio.duration);
+          endRef.current = audio.duration;
         } else {
             setEnd(sound.trimEnd);
+            endRef.current = sound.trimEnd;
         }
+        setMetadataLoaded(true);
       };
 
       audio.onended = () => {
         setIsPlaying(false);
         // Reset to start
-        audio.currentTime = start; 
+        audio.currentTime = startRef.current; 
       };
 
       return () => {
@@ -73,37 +83,37 @@ const TrimModal: React.FC<TrimModalProps> = ({ sound, isOpen, onClose, onSave, m
          // If we go past the end, loop back to start (Standard Trim Behavior)
          // or Stop (if strictly requested "play from there to there"). 
          // Looping is usually better for Previewing a cut.
-         if (audio.currentTime >= end) {
-             audio.currentTime = start;
+         if (audio.currentTime >= endRef.current) {
+             audio.currentTime = startRef.current;
              // Optional: Uncomment next line to STOP instead of LOOP
              // audio.pause(); setIsPlaying(false);
          }
     };
 
     // If current time is outside bounds while dragging, reset it
-    if (currentTime < start || currentTime > end) {
-        audio.currentTime = start;
-        setCurrentTime(start);
+    if (currentTime < startRef.current || currentTime > endRef.current) {
+        audio.currentTime = startRef.current;
+        setCurrentTime(startRef.current);
     }
-  }, [start, end]);
+  }, [isOpen, sound]);
 
   const togglePreview = () => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || !metadataLoaded) return;
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      audioRef.current.currentTime = start;
+      audioRef.current.currentTime = startRef.current;
       audioRef.current.play();
       setIsPlaying(true);
     }
   };
 
   const handleSave = () => {
-    if (sound) {
+    if (sound && metadataLoaded && isFinite(duration) && duration > 0) {
       // Pause before saving/closing
       if (audioRef.current) audioRef.current.pause();
-      onSave(sound.id, start, end);
+      onSave(sound.id, startRef.current, endRef.current);
       onClose();
     }
   };
@@ -117,6 +127,8 @@ const TrimModal: React.FC<TrimModalProps> = ({ sound, isOpen, onClose, onSave, m
   const handleReset = () => {
       setStart(0);
       setEnd(duration);
+      startRef.current = 0;
+      endRef.current = duration;
       if (audioRef.current) audioRef.current.currentTime = 0;
   };
 
@@ -180,9 +192,13 @@ const TrimModal: React.FC<TrimModalProps> = ({ sound, isOpen, onClose, onSave, m
                     max={duration}
                     step="0.01"
                     value={start}
+                    disabled={!metadataLoaded}
                     onChange={(e) => {
                         const val = parseFloat(e.target.value);
-                        if (val < end - 0.1) setStart(val);
+                        if (val < endRef.current - 0.1) {
+                          startRef.current = val;
+                          setStart(val);
+                        }
                     }}
                     className="absolute top-1/2 -translate-y-1/2 w-full h-2 appearance-none bg-transparent pointer-events-none z-20 
                     [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-pink-500 [&::-webkit-slider-thumb]:rounded-sm [&::-webkit-slider-thumb]:cursor-col-resize"
@@ -193,9 +209,13 @@ const TrimModal: React.FC<TrimModalProps> = ({ sound, isOpen, onClose, onSave, m
                     max={duration}
                     step="0.01"
                     value={end}
+                    disabled={!metadataLoaded}
                     onChange={(e) => {
                         const val = parseFloat(e.target.value);
-                        if (val > start + 0.1) setEnd(val);
+                        if (val > startRef.current + 0.1) {
+                          endRef.current = val;
+                          setEnd(val);
+                        }
                     }}
                     className="absolute top-1/2 -translate-y-1/2 w-full h-2 appearance-none bg-transparent pointer-events-none z-20
                     [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-pink-500 [&::-webkit-slider-thumb]:rounded-sm [&::-webkit-slider-thumb]:cursor-col-resize"
@@ -237,7 +257,8 @@ const TrimModal: React.FC<TrimModalProps> = ({ sound, isOpen, onClose, onSave, m
           <button 
             type="button"
             onClick={handleSave}
-            className="px-6 py-2 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 active:scale-95 transition-all font-persian"
+            disabled={!metadataLoaded || !isFinite(duration) || duration <= 0}
+            className="px-6 py-2 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 active:scale-95 transition-all font-persian disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check size={16} />
             {t('save')}

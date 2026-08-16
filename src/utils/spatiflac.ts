@@ -169,11 +169,11 @@ function mapExtensionItem(item: any, ext: SpatiflacExtension): OnlineTrack | nul
     title,
     artist: artist || 'Unknown Artist',
     album: item.album_name || item.album,
-    cover: item.cover_url || item.images || item.artwork_url,
+    cover: item.cover_url || (Array.isArray(item.images) ? item.images[0]?.url : item.images) || item.artwork_url,
     duration: durationMs > 0 ? durationMs / 1000 : undefined,
     genre: item.genre,
     releaseDate: item.release_date || item.releaseDate,
-    sourceUrl: item.external_urls || item.url,
+    sourceUrl: item.external_urls?.spotify || (typeof item.external_urls === 'string' ? item.external_urls : undefined) || item.url,
     extensionId: ext.id,
     extensionName: ext.name,
     extensionColor: ext.color,
@@ -271,18 +271,19 @@ function buildSearchQuery(track: OnlineTrack): string {
 }
 
 export async function resolveFullTrack(track: OnlineTrack, onProgress?: (percent: number) => void): Promise<FullTrackResult> {
+  const downloadId = crypto.randomUUID();
+  const cleanup = window.electronAPI.onOnlineDownloadProgress((data) => {
+    if (data.downloadId === downloadId && onProgress) onProgress(data.percent);
+  });
   try {
-    const downloadId = crypto.randomUUID();
-    const cleanup = window.electronAPI.onOnlineDownloadProgress((data) => {
-      if (data.downloadId === downloadId && onProgress) onProgress(data.percent);
-    });
     const query = buildSearchQuery(track);
     const cacheKey = `${track.artist} - ${track.title}`;
     const result = await window.electronAPI.onlineFullTrack({ query, cacheKey, downloadId });
-    cleanup();
     return result;
   } catch (e: any) {
     return { success: false, error: e.message || 'Full-track resolution failed' };
+  } finally {
+    cleanup();
   }
 }
 

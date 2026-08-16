@@ -1,7 +1,7 @@
 {
   "files": {
-    "main.css": "./static/css/main.cdbec57c.css",
-    "main.js": "./static/js/main.d4518e38.js",
+    "main.css": "./static/css/main.fc0a36e9.css",
+    "main.js": "./static/js/main.b5c31ff6.js",
     "static/media/Inter-ExtraBold.ttf": "./static/media/Inter-ExtraBold.58d3a8bccabac2ee22a5.ttf",
     "static/media/Inter-Bold.ttf": "./static/media/Inter-Bold.1f24ea5f7829811a9307.ttf",
     "static/media/Inter-Black.ttf": "./static/media/Inter-Black.9f338602a2c79d04ff1c.ttf",
@@ -21,11 +21,11 @@
     "static/media/Vazirmatn-Regular.ttf": "./static/media/Vazirmatn-Regular.f08bc22d4f5bb01fb82f.ttf",
     "static/media/Vazirmatn-Medium.ttf": "./static/media/Vazirmatn-Medium.69fe579d5c984c16172d.ttf",
     "index.html": "./index.html",
-    "main.cdbec57c.css.map": "./static/css/main.cdbec57c.css.map",
-    "main.d4518e38.js.map": "./static/js/main.d4518e38.js.map"
+    "main.fc0a36e9.css.map": "./static/css/main.fc0a36e9.css.map",
+    "main.b5c31ff6.js.map": "./static/js/main.b5c31ff6.js.map"
   },
   "entrypoints": [
-    "static/css/main.cdbec57c.css",
-    "static/js/main.d4518e38.js"
+    "static/css/main.fc0a36e9.css",
+    "static/js/main.b5c31ff6.js"
   ]
 }

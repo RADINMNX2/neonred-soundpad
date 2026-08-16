@@ -42,6 +42,14 @@ const OnlineTrackDetailModal: React.FC<OnlineTrackDetailModalProps> = ({ track, 
   }, [track, ext]);
 
   useEffect(() => {
+    const audio = previewRef.current;
+    if (!audio || !track) return;
+    const handleEnded = () => setIsPreviewPlaying(false);
+    audio.addEventListener('ended', handleEnded);
+    return () => audio.removeEventListener('ended', handleEnded);
+  }, [track]);
+
+  useEffect(() => {
     return () => {
       if (previewRef.current) previewRef.current.pause();
     };

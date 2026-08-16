@@ -15,6 +15,7 @@ const MiniPlayer: React.FC = () => {
   
   // Use ref for dragging state to avoid effect re-runs
   const isDraggingRef = useRef(false);
+  const dragTimeRef = useRef(0);
 
   useEffect(() => {
     // Transparent background setup
@@ -48,6 +49,28 @@ const MiniPlayer: React.FC = () => {
     }
   }, []);
 
+  // Commit a drag seek; also released outside the input (window mouseup/touchend)
+  const commitSeek = (val: number) => {
+      isDraggingRef.current = false;
+      if (window.electronAPI) {
+          window.electronAPI.seekMusic(val);
+      }
+  };
+
+  useEffect(() => {
+      const onGlobalRelease = () => {
+          if (isDraggingRef.current) {
+              commitSeek(dragTimeRef.current);
+          }
+      };
+      window.addEventListener('mouseup', onGlobalRelease);
+      window.addEventListener('touchend', onGlobalRelease);
+      return () => {
+          window.removeEventListener('mouseup', onGlobalRelease);
+          window.removeEventListener('touchend', onGlobalRelease);
+      };
+  }, []);
+
   // Extract color when track changes
   useEffect(() => {
     if (musicState.track?.cover) {
@@ -66,21 +89,21 @@ const MiniPlayer: React.FC = () => {
   const handleSeekStart = () => {
       isDraggingRef.current = true;
       setDragTime(musicState.currentTime);
+      dragTimeRef.current = musicState.currentTime;
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = parseFloat(e.target.value);
       setDragTime(val);
+      dragTimeRef.current = val;
       // Update UI immediately while dragging
       setMusicState(prev => ({ ...prev, currentTime: val }));
   };
 
   const handleSeekEnd = (e: React.MouseEvent<HTMLInputElement>) => {
-      isDraggingRef.current = false;
       const val = parseFloat((e.target as HTMLInputElement).value);
-      if (window.electronAPI) {
-          window.electronAPI.seekMusic(val);
-      }
+      dragTimeRef.current = val;
+      commitSeek(val);
   };
 
   const formatTime = (seconds: number) => {

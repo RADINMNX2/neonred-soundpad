@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { ThemeConfig } from '../types';
+import { hexToRgb, isValidHexColor } from '../utils/colorUtils';
 
 interface ThemeContextType {
   theme: ThemeConfig;
@@ -18,18 +19,19 @@ const DEFAULT_THEME: ThemeConfig = {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-// Helper to convert Hex to RGB string "r g b" for Tailwind opacity support
-const hexToRgb = (hex: string): string => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? `${parseInt(result[1], 16)} ${parseInt(result[2], 16)} ${parseInt(result[3], 16)}`
-    : '0 0 0';
+const toRgbString = (hex: string): string => {
+  const rgb = hexToRgb(hex);
+  return rgb ? `${rgb.r} ${rgb.g} ${rgb.b}` : '0 0 0';
 };
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<ThemeConfig>(() => {
-    const saved = localStorage.getItem('app_theme');
-    return saved ? JSON.parse(saved) : DEFAULT_THEME;
+    try {
+      const saved = localStorage.getItem('app_theme');
+      return saved ? { ...DEFAULT_THEME, ...JSON.parse(saved) } : DEFAULT_THEME;
+    } catch {
+      return DEFAULT_THEME;
+    }
   });
 
   useEffect(() => {
@@ -37,11 +39,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     
     // Apply CSS Variables
     const root = document.documentElement;
-    root.style.setProperty('--color-primary', hexToRgb(theme.primary));
-    root.style.setProperty('--color-secondary', hexToRgb(theme.secondary));
-    root.style.setProperty('--color-accent', hexToRgb(theme.accent));
-    root.style.setProperty('--color-background', hexToRgb(theme.background));
-    root.style.setProperty('--color-surface', hexToRgb(theme.surface));
+    root.style.setProperty('--color-primary', toRgbString(theme.primary));
+    root.style.setProperty('--color-secondary', toRgbString(theme.secondary));
+    root.style.setProperty('--color-accent', toRgbString(theme.accent));
+    root.style.setProperty('--color-background', toRgbString(theme.background));
+    root.style.setProperty('--color-surface', toRgbString(theme.surface));
     
     // Also set direct hex values for non-tailwind usage if needed
     root.style.setProperty('--color-primary-hex', theme.primary);
@@ -49,6 +51,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [theme]);
 
   const updateTheme = (key: keyof ThemeConfig, color: string) => {
+    if (!isValidHexColor(color)) return;
     setTheme(prev => ({ ...prev, [key]: color }));
   };
 

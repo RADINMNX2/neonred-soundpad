@@ -198,13 +198,14 @@ export async function installExtensionPackage(ext: SpatiflacExtension): Promise<
 }
 
 export async function uninstallExtensionPackage(ext: SpatiflacExtension): Promise<{ success: boolean; error?: string }> {
-  removeInstalledRegistryExtension(ext.id);
   if (ext.packageId && window.electronAPI?.extensionsUninstall) {
     try {
-      await window.electronAPI.extensionsUninstall(ext.packageId);
+      const result = await window.electronAPI.extensionsUninstall(ext.packageId);
+      if (!result.success) return { success: false, error: result.error };
     } catch (e: any) {
       return { success: false, error: e.message || 'Uninstall failed' };
     }
   }
+  removeInstalledRegistryExtension(ext.id);
   return { success: true };
 }

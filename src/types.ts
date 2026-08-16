@@ -158,6 +158,21 @@ export enum Page {
   SETTINGS = 'SETTINGS'
 }
 
+export type Theme = 'default' | 'frost';
+
+export interface ThemeConfig {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  surface: string;
+}
+
+export interface CrossfadeConfig {
+  isEnabled: boolean;
+  duration: number;
+}
+
 export interface MicEqSettings {
   micGain: number;
   voiceClarity: number;
