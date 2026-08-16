@@ -247,6 +247,7 @@ const AppContent: React.FC = () => {
         {isLanguageModalOpen && <LanguageSelectorModal isOpen={isLanguageModalOpen} onSelect={(l) => { 
           setLanguage(l); 
           setIsLanguageModalOpen(false); 
+          localStorage.setItem('hasPickedLanguage', 'true');
           if (helpModalTimeoutRef.current) { clearTimeout(helpModalTimeoutRef.current); helpModalTimeoutRef.current = null; }
           if (!localStorage.getItem('hasSeenHelp')) {
             helpModalTimeoutRef.current = setTimeout(() => { helpModalTimeoutRef.current = null; setIsHelpOpen(true); }, 300);
