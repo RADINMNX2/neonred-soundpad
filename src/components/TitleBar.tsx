@@ -79,7 +79,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ currentPage, setPage, showUpdateIco
           `}
         >
           {currentPage === Page.PAD && (
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/10 rounded-xl shadow-inner animate-fade-in"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/10 rounded-xl shadow-inner tab-active"></div>
           )}
           <span className="relative z-10 flex items-center gap-2">
             <Grid size={18} className={`transition-all duration-300 ${currentPage === Page.PAD ? "text-red-500 scale-110" : "group-hover:text-red-400 group-hover:rotate-12"}`} />
@@ -95,7 +95,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ currentPage, setPage, showUpdateIco
           `}
         >
           {currentPage === Page.MUSIC && (
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/10 rounded-xl shadow-inner animate-fade-in"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/10 rounded-xl shadow-inner tab-active"></div>
           )}
           <span className="relative z-10 flex items-center gap-2">
             <Music size={18} className={`transition-all duration-300 ${currentPage === Page.MUSIC ? "text-pink-500 scale-110" : "group-hover:text-pink-400 group-hover:-rotate-12"}`} />
@@ -111,7 +111,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ currentPage, setPage, showUpdateIco
           `}
         >
            {currentPage === Page.SETTINGS && (
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/10 rounded-xl shadow-inner animate-fade-in"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/10 rounded-xl shadow-inner tab-active"></div>
           )}
           <span className="relative z-10 flex items-center gap-2">
             <Settings size={18} className={`transition-all duration-300 ${currentPage === Page.SETTINGS ? "text-blue-500 rotate-180" : "group-hover:text-blue-400 group-hover:rotate-90"}`} />

@@ -11,6 +11,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.1.1",
+    date: "2026-08-16",
+    features: {
+      added: [
+        "Playlist 2.0: A modernized queue with instant search (press /), album-grouped sticky headers, drag-and-drop reorder with drop indicators, and a jump-to-current-track button.",
+        "Per-Track Mini EQ: Each playing row lights up with its own animated equalizer bars — you can always see what's alive.",
+        "Smarter Playlist Actions: A clean per-row menu for play / details / remove, plus a selection mode for mass cleanup.",
+        "Cinematic Page Transitions: Switching between Settings, Soundboard and Music Player now glides with a directional sweep, staggered children and a glowing progress indicator — with automatic reduced-motion support.",
+        "Mic EQ Studio Upgrade: Draft mode with Cancel/Save, fine-tune +/- buttons per band, live response-curve canvas, vertical axis legend, keyboard-friendly sliders and a proper focus trap."
+      ],
+      fixed: [
+        "Fixed the blur/lyrics overlay stealing clicks — equalizer, minimize and settings buttons on the cover are clickable again.",
+        "Mic EQ modal now closes with Escape, remembers your starting point until you Save, and no longer double-buffers the curve with stale frames."
+      ]
+    }
+  },
+  {
     version: "2.1.0",
     date: "2026-08-16",
     features: {

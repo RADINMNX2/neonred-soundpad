@@ -113,7 +113,7 @@ const Settings: React.FC<SettingsProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-black relative overflow-y-auto">
-      <div className="p-8 max-w-5xl mx-auto w-full z-10 pb-8">
+      <div className="p-8 max-w-5xl mx-auto w-full z-10 pb-8 page-stagger">
         <div className="flex justify-between items-center mb-2">
             <h2 className="text-3xl font-bold text-white font-persian">{t('settingsTitle')}</h2>
             <div className="flex gap-2">

@@ -26,10 +26,41 @@ const AppContent: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>(Page.PAD);
+  const [transitionPhase, setTransitionPhase] = useState<'idle' | 'exiting' | 'entering'>('idle');
+  const [prevPage, setPrevPage] = useState<Page | null>(null);
+  const exitTimerRef = useRef<number | null>(null);
+  const enterTimerRef = useRef<number | null>(null);
   const [incomingMusicFile, setIncomingMusicFile] = useState<{ path: string; id: number } | undefined>(undefined);
   
   const { setLanguage } = useLanguage();
-  const { reportActivity } = useSmartCore(); 
+  const { reportActivity, isLowPowerMode } = useSmartCore();
+
+  const EXIT_MS = isLowPowerMode ? 0 : 160;
+  const ENTER_MS = isLowPowerMode ? 0 : 640;
+
+  const clearTimers = useCallback(() => {
+    if (exitTimerRef.current !== null) { window.clearTimeout(exitTimerRef.current); exitTimerRef.current = null; }
+    if (enterTimerRef.current !== null) { window.clearTimeout(enterTimerRef.current); enterTimerRef.current = null; }
+  }, []);
+
+  const navigateTo = useCallback((next: Page) => {
+    if (next === currentPage || transitionPhase !== 'idle') return;
+    clearTimers();
+    setPrevPage(currentPage);
+    setCurrentPage(next);
+    setTransitionPhase('exiting');
+    exitTimerRef.current = window.setTimeout(() => {
+      exitTimerRef.current = null;
+      setTransitionPhase('entering');
+    }, EXIT_MS);
+    enterTimerRef.current = window.setTimeout(() => {
+      enterTimerRef.current = null;
+      setTransitionPhase('idle');
+      setPrevPage(null);
+    }, ENTER_MS);
+  }, [currentPage, transitionPhase, clearTimers, EXIT_MS, ENTER_MS]);
+
+  useEffect(() => () => clearTimers(), [clearTimers]); 
 
   const reportActivityRef = useRef(reportActivity);
   useEffect(() => { reportActivityRef.current = reportActivity; }, [reportActivity]);
@@ -150,7 +181,7 @@ const AppContent: React.FC = () => {
           window.electronAPI.checkForUpdates();
           const cleanupFile = window.electronAPI.onFileOpened((path) => {
              setIncomingMusicFile({ path, id: Date.now() });
-             setCurrentPage(Page.MUSIC);
+             navigateTo(Page.MUSIC);
           });
           const cleanupUpdateAvailable = window.electronAPI.onUpdateAvailable((info) => {
              setUpdateInfo(info);
@@ -175,6 +206,19 @@ const AppContent: React.FC = () => {
     }
   }, [isLoading, isTrayMode, isMiniMode]);
 
+  const shellClass = (page: Page) => {
+    if (transitionPhase === 'idle')
+      return `page-shell ${currentPage === page ? 'page-active' : 'page-hidden'}`;
+    if (transitionPhase === 'exiting') {
+      if (page === prevPage) return 'page-shell page-exit';
+      if (page === currentPage) return 'page-shell page-prep';
+      return 'page-shell page-hidden';
+    }
+    if (page === currentPage) return 'page-shell page-enter';
+    if (page === prevPage) return 'page-shell page-exit-done';
+    return 'page-shell page-hidden';
+  };
+
   // RENDER MODES
   if (isMiniMode) return <MiniPlayer />;
   if (isTrayMode) return <TrayMenu />; // Fallback if tray mode is ever used directly
@@ -183,11 +227,11 @@ const AppContent: React.FC = () => {
     <>
       {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
       
-      <div className={`flex flex-col h-screen w-screen overflow-hidden bg-black text-white selection:bg-red-500 selection:text-white border border-red-900/20 rounded-lg transition-opacity duration-1000 ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
+      <div className={`flex flex-col h-screen w-screen overflow-hidden bg-black text-white selection:bg-red-500 selection:text-white border border-red-900/20 rounded-lg transition-opacity duration-1000 ${isLoading ? 'opacity-0' : 'opacity-100'} ${isLowPowerMode ? 'motion-off' : ''}`}>
         
         <TitleBar 
             currentPage={currentPage} 
-            setPage={setCurrentPage} 
+            setPage={navigateTo} 
             showUpdateIcon={!!updateInfo && !isUpdateModalOpen}
             isUpdateReady={updateDownloaded}
             onUpdateClick={() => setIsUpdateModalOpen(true)}
@@ -196,7 +240,7 @@ const AppContent: React.FC = () => {
         <div className="flex flex-1 overflow-hidden relative">
           <main className="flex-1 relative overflow-hidden bg-zinc-950 transition-all duration-300">
             
-            <div className={`absolute inset-0 transition-all duration-500 ease-out ${currentPage === Page.PAD ? 'opacity-100 translate-y-0 scale-100 z-10' : 'opacity-0 translate-y-10 scale-95 -z-10 pointer-events-none'}`}>
+            <div className={shellClass(Page.PAD)}>
               <SoundPad 
                 monitorDeviceId={monitorDeviceId} 
                 injectorDeviceId={injectorDeviceId}
@@ -209,7 +253,7 @@ const AppContent: React.FC = () => {
               />
             </div>
 
-            <div className={`absolute inset-0 transition-all duration-500 ease-out ${currentPage === Page.MUSIC ? 'opacity-100 translate-y-0 scale-100 z-10' : 'opacity-0 translate-y-10 scale-95 -z-10 pointer-events-none'}`}>
+            <div className={shellClass(Page.MUSIC)}>
                <MusicPlayer 
                   monitorDeviceId={monitorDeviceId}
                   masterVolume={masterVolume}
@@ -218,7 +262,7 @@ const AppContent: React.FC = () => {
                />
             </div>
 
-            <div className={`absolute inset-0 transition-all duration-500 ease-out ${currentPage === Page.SETTINGS ? 'opacity-100 translate-y-0 scale-100 z-10' : 'opacity-0 translate-y-10 scale-95 -z-10 pointer-events-none'}`}>
+            <div className={shellClass(Page.SETTINGS)}>
               <Settings 
                 monitorDeviceId={monitorDeviceId} 
                 injectorDeviceId={injectorDeviceId}
@@ -243,6 +287,9 @@ const AppContent: React.FC = () => {
             </div>
           </main>
         </div>
+
+        {transitionPhase !== 'idle' && <div className="page-glow-sweep" aria-hidden="true" />}
+        {transitionPhase !== 'idle' && <div className="page-indicator" aria-hidden="true" />}
 
         {isLanguageModalOpen && <LanguageSelectorModal isOpen={isLanguageModalOpen} onSelect={(l) => { 
           setLanguage(l); 

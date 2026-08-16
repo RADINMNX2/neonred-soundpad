@@ -707,10 +707,10 @@ const SoundPad: React.FC<SoundPadProps> = ({
   const saveTrim = (id: string, start: number, end: number) => { setSounds(prev => prev.map(s => s.id === id ? { ...s, trimStart: start, trimEnd: end } : s)); if (detailsSound && detailsSound.id === id) { setDetailsSound(prev => prev ? { ...prev, trimStart: start, trimEnd: end } : null); } };
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-black via-zinc-950 to-black p-4 md:p-6 animate-fade-in relative">
+    <div className="flex flex-col h-full bg-gradient-to-br from-black via-zinc-950 to-black p-4 md:p-6 relative">
       
       {/* --- COMPACT TOOLBAR --- */}
-      <div className="flex items-center justify-between mb-6 z-20">
+      <div className="flex items-center justify-between mb-6 z-20 page-stagger">
          
          {/* Left Group */}
          <div className="flex items-center gap-3">
@@ -792,7 +792,7 @@ const SoundPad: React.FC<SoundPadProps> = ({
 
       {/* --- GRID CONTENT --- */}
       <div 
-        className="flex-1 overflow-y-auto pb-20 pr-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-800"
+        className="flex-1 overflow-y-auto pb-20 pr-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-800 page-stagger"
         style={{ contentVisibility: 'auto' }}
       >
         {sounds.length === 0 ? (
