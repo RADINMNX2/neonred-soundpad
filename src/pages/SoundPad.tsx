@@ -427,17 +427,26 @@ const SoundPad: React.FC<SoundPadProps> = ({
       if (ctx.state === 'suspended') await ctx.resume();
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            deviceId: micInputDeviceId === 'default' ? undefined : { exact: micInputDeviceId },
-            // HARD DISABLE Windows Processing to keep raw quality
-            echoCancellation: micEqSettings.echoCancellation, 
-            noiseSuppression: micEqSettings.noiseSuppression,
-            autoGainControl: false,
-            channelCount: 2, // Force Stereo
-            latency: 0.02
-          } as any
-        });
+        const baseAudio = {
+          // HARD DISABLE Windows Processing to keep raw quality
+          echoCancellation: micEqSettings.echoCancellation, 
+          noiseSuppression: micEqSettings.noiseSuppression,
+          autoGainControl: false,
+          channelCount: 2, // Force Stereo
+          latency: 0.02
+        };
+        let stream = null;
+        if (micInputDeviceId && micInputDeviceId !== 'default') {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: { ...baseAudio, deviceId: { exact: micInputDeviceId } } as any });
+          } catch (e) {
+            console.warn('Mic device not available, falling back to default input', e);
+            stream = null;
+          }
+        }
+        if (!stream) {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: { ...baseAudio } as any });
+        }
 
         if (!isActive) { stream.getTracks().forEach(t => t.stop()); return; }
         micStreamRef.current = stream;

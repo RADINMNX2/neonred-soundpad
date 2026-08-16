@@ -71,7 +71,7 @@ const AdvancedAudioModal: React.FC<AdvancedAudioModalProps> = ({ isOpen, onClose
       </div>
 
       {/* Text */}
-      <div className={`flex flex-col text-${isRTL ? 'right' : 'left'}`}>
+      <div className={`flex flex-col ${isRTL ? 'text-right' : 'text-left'}`}>
         <span className={`font-bold text-lg ${active ? 'text-white' : 'text-gray-400'}`}>{title}</span>
         <span className="text-xs text-gray-500 font-persian">{desc}</span>
       </div>

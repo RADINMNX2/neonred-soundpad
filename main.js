@@ -90,9 +90,15 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('error', (err) => {
+    const msg = err && err.message ? err.message : String(err);
+    const isNoFeed = /Cannot find latest\.yml|HttpError|\b404\b/i.test(msg);
+    if (isNoFeed) {
+      log.info('No published update feed — update check skipped.');
+      return;
+    }
     log.error('Update error:', err);
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-error', err.message);
+      mainWindow.webContents.send('update-error', msg);
     }
   });
 
@@ -407,8 +413,14 @@ function registerIpcHandlers() {
   ipcMain.on('check-for-updates', () => {
      if (!isDev) {
          autoUpdater.checkForUpdates().catch(err => {
+             const msg = err && err.message ? err.message : String(err);
+             const isNoFeed = /Cannot find latest\.yml|HttpError|\b404\b/i.test(msg);
+             if (isNoFeed) {
+                 log.info('No published update feed — update check skipped.');
+                 return;
+             }
              log.error("Check for updates failed", err);
-             if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-error', err.message);
+             if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-error', msg);
          });
      }
   });
@@ -417,9 +429,14 @@ function registerIpcHandlers() {
      try {
          await autoUpdater.downloadUpdate();
      } catch (err) {
+         const msg = err && err.message ? err.message : String(err);
+         if (/Cannot find latest\.yml|HttpError|\b404\b/i.test(msg)) {
+             log.info('No published update feed — download skipped.');
+             return;
+         }
          log.error('Download update failed', err);
          if (mainWindow && !mainWindow.isDestroyed()) {
-             mainWindow.webContents.send('update-error', err.message);
+             mainWindow.webContents.send('update-error', msg);
          }
      }
   });

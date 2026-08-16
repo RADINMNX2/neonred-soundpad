@@ -464,7 +464,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         const doPlay = async () => {
             // Re-apply sinkId before every play to prevent browser from resetting it on src change
             if (monitorDeviceIdRef.current && typeof (audio as any).setSinkId === 'function') {
-                await (audio as any).setSinkId(monitorDeviceIdRef.current).catch(console.warn);
+                await (audio as any).setSinkId(monitorDeviceIdRef.current).catch((e: any) => {
+                    if (e?.name !== 'AbortError' && e?.name !== 'NotSupportedError') console.warn('setSinkId failed', e);
+                });
             }
             if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
             audio.play().catch(console.error);
@@ -493,7 +495,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   useEffect(() => {
       const audio = audioElementRef.current as ExtendedAudioElement;
-      if (audio && monitorDeviceId && typeof audio.setSinkId === 'function') audio.setSinkId(monitorDeviceId).catch(console.warn);
+      if (audio && monitorDeviceId && typeof audio.setSinkId === 'function') audio.setSinkId(monitorDeviceId).catch((e: any) => {
+          if (e?.name !== 'AbortError' && e?.name !== 'NotSupportedError') console.warn('setSinkId failed', e);
+      });
   }, [monitorDeviceId]);
 
   // Add Files Manually

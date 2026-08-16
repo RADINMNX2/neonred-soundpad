@@ -7,6 +7,62 @@ const ENABLED_KEY = 'spatiflac_enabled_extensions';
 const SEARCH_API = 'https://itunes.apple.com/search';
 const TOP_CHART_API = 'https://rss.applemarketingtools.com/api/v2/us/music/most-played/50/songs.json';
 const TOP_ALBUMS_API = 'https://rss.applemarketingtools.com/api/v2/us/music/most-played/50/albums.json';
+const FALLBACK_CHART_API = 'https://itunes.apple.com/us/rss/topsongs/limit=50/json';
+const FALLBACK_ALBUMS_API = 'https://itunes.apple.com/us/rss/topalbums/limit=50/json';
+
+const CHART_CACHE_TTL = 10 * 60 * 1000;
+const chartCache = new Map<string, { at: number; items: ITunesChartEntry[] }>();
+
+function normalizeChartEntry(raw: any): ITunesChartEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.name || raw.artistName) return raw as ITunesChartEntry;
+  const name = raw['im:name']?.label;
+  if (!name) return null;
+  let id: string | undefined;
+  if (raw.id?.attributes?.['im:id']) id = String(raw.id.attributes['im:id']);
+  else if (typeof raw.id?.label === 'string') {
+    const match = String(raw.id.label).match(/\/id(\d+)/);
+    if (match) id = match[1];
+  }
+  const images = raw['im:image'];
+  const artwork = Array.isArray(images) && images.length > 0 ? images[images.length - 1].label : undefined;
+  return {
+    id,
+    name,
+    artistName: raw['im:artist']?.label,
+    collectionName: raw['im:collection']?.['im:name']?.label,
+    artworkUrl100: artwork,
+    url: typeof raw.id?.label === 'string' ? raw.id.label : undefined,
+    releaseDate: raw.releaseDate?.label,
+    genres: raw.category ? [{ name: String(raw.category.label || raw.category.attributes?.label || '') }] : undefined,
+  };
+}
+
+async function fetchChart(primaryUrl: string, fallbackUrl: string): Promise<ITunesChartEntry[]> {
+  const cached = chartCache.get(primaryUrl);
+  if (cached && Date.now() - cached.at < CHART_CACHE_TTL) return cached.items;
+  const attempt = async (u: string): Promise<ITunesChartEntry[] | null> => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15000);
+    try {
+      const res = await fetch(u, { signal: ac.signal, headers: { Accept: 'application/json' } });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const raw = data?.feed?.results || data?.feed?.entry || [];
+      const entries = raw.map(normalizeChartEntry).filter((e): e is ITunesChartEntry => !!e);
+      return entries.length > 0 ? entries : null;
+    } catch (e) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  let entries = await attempt(primaryUrl);
+  if (!entries) entries = await attempt(fallbackUrl);
+  if (!entries) entries = [];
+  chartCache.set(primaryUrl, { at: Date.now(), items: entries });
+  return entries;
+}
 
 export const BUILTIN_EXTENSIONS: SpatiflacExtension[] = [
   {
@@ -227,38 +283,26 @@ export async function searchTracks(query: string, extensions: SpatiflacExtension
 export async function getFeaturedTracks(extensions: SpatiflacExtension[]): Promise<OnlineTrack[]> {
   const enabled = getEnabledExtensions(extensions, 'all');
   if (enabled.length === 0) return [];
+  const entries = await fetchChart(TOP_CHART_API, FALLBACK_CHART_API);
   const results: OnlineTrack[] = [];
-  await Promise.all(enabled.map(async (ext) => {
-    try {
-      const res = await fetch(TOP_CHART_API);
-      if (!res.ok) return;
-      const data = await res.json();
-      (data.feed?.results || []).forEach((r: ITunesChartEntry) => {
-        results.push(toOnlineTrack(r, ext, String(r.id || results.length)));
-      });
-    } catch (e) {
-      console.warn(`[spatiflac] ${ext.id} chart failed`, e);
-    }
-  }));
+  enabled.forEach((ext) => {
+    entries.forEach((r, i) => {
+      results.push(toOnlineTrack(r, ext, String(r.id || i)));
+    });
+  });
   return results;
 }
 
 export async function getFeaturedAlbums(extensions: SpatiflacExtension[]): Promise<OnlineTrack[]> {
   const enabled = getEnabledExtensions(extensions, 'all');
   if (enabled.length === 0) return [];
+  const entries = await fetchChart(TOP_ALBUMS_API, FALLBACK_ALBUMS_API);
   const results: OnlineTrack[] = [];
-  await Promise.all(enabled.map(async (ext) => {
-    try {
-      const res = await fetch(TOP_ALBUMS_API);
-      if (!res.ok) return;
-      const data = await res.json();
-      (data.feed?.results || []).forEach((r: ITunesChartEntry) => {
-        results.push(toOnlineTrack(r, ext, String(r.id || results.length)));
-      });
-    } catch (e) {
-      console.warn(`[spatiflac] ${ext.id} albums failed`, e);
-    }
-  }));
+  enabled.forEach((ext) => {
+    entries.forEach((r, i) => {
+      results.push(toOnlineTrack(r, ext, String(r.id || i)));
+    });
+  });
   return results;
 }
 

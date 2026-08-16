@@ -9,6 +9,7 @@ module.exports = {
     extend: {
       fontFamily: {
         sans: ['Inter', 'Vazirmatn', 'ui-sans-serif', 'system-ui'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
         persian: ['Vazirmatn', 'sans-serif'],
       },
       colors: {
@@ -25,6 +26,7 @@ module.exports = {
         'slide-in-right': 'slideInRight 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
         'shimmer': 'shimmer 2s linear infinite',
         'border-flow': 'borderRotate 4s linear infinite',
+        'glitch': 'glitch 1s linear infinite',
         'scanline': 'scanline 4s linear infinite',
         'wave': 'wave 5s linear infinite',
       },
@@ -54,6 +56,11 @@ module.exports = {
         borderRotate: {
           '0%': { backgroundPosition: '0% 50%' },
           '100%': { backgroundPosition: '100% 50%' }
+        },
+        glitch: {
+          '2%, 64%': { transform: 'translate(2px,0) skew(0deg)' },
+          '4%, 60%': { transform: 'translate(-2px,0) skew(0deg)' },
+          '62%': { transform: 'translate(0,0) skew(5deg)' },
         },
         scanline: {
           '0%': { top: '-20%' },
