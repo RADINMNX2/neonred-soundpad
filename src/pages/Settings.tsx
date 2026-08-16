@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic2, Radio, Headphones, Volume2, RefreshCw, Monitor, Download, ShieldCheck, Waves, Zap, ChevronDown, Globe, HelpCircle, Heart, Mail, MessageCircle, Code, FileJson, Check, Sparkles, ChevronRight } from 'lucide-react';
+import { Mic2, Radio, Headphones, Volume2, RefreshCw, Monitor, Download, ShieldCheck, Waves, Zap, ChevronDown, Globe, HelpCircle, Heart, Mail, MessageCircle, Code, FileJson, Check, Sparkles, ChevronRight, Plug, Store } from 'lucide-react';
 import { AudioDevice, MicEqSettings } from '../types';
 import MicSettingModal from '../components/MicSettingModal';
 import AdvancedAudioModal from '../components/AdvancedAudioModal';
