@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, Component } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Component } from 'react';
 // Sidebar import removed
 import SoundPad from './pages/SoundPad';
 import Settings from './pages/Settings';

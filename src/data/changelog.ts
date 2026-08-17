@@ -11,6 +11,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.1.2",
+    date: "2026-08-16",
+    features: {
+      fixed: [
+        "Fixed a startup crash in the App shell (missing useCallback import) that could freeze the renderer right after launch.",
+        "Fixed the same class of bug in the Music Player queue (missing useMemo import) — the search / grouping engine now runs safely."
+      ]
+    }
+  },
+  {
     version: "2.1.1",
     date: "2026-08-16",
     features: {
