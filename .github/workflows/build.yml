@@ -34,6 +34,8 @@ jobs:
 
       - name: Install Dependencies
         run: npm install
+        env:
+          YOUTUBE_DL_SKIP_PYTHON_CHECK: 1
 
       - name: Prepare Source Package (Prebuild)
         run: npm run prebuild

@@ -332,11 +332,8 @@ export async function resolveFullTrack(track: OnlineTrack, onProgress?: (percent
 }
 
 export function resolveDownloadSource(track: OnlineTrack, quality: QualityOption): { url: string; ext: string; isFallback: boolean } {
-  if (quality.available && track.previewUrl) {
-    return { url: track.previewUrl, ext: quality.ext, isFallback: false };
-  }
-  if (track.previewUrl) {
-    return { url: track.previewUrl, ext: 'm4a', isFallback: true };
+  if (quality.engine === 'preview' && track.previewUrl) {
+    return { url: track.previewUrl, ext: 'm4a', isFallback: false };
   }
   throw new Error('No downloadable stream available for this track.');
 }
@@ -362,9 +359,13 @@ export async function downloadOnlineTrack(
         return undefined;
       }
     })();
-    const qualityId = ext && ext.qualityOptions.length > 0
-      ? (ext.qualityOptions.find(q => !q.isPreview) || ext.qualityOptions[0]).id
-      : (quality.engine === 'flac' ? 'FLAC' : 'BEST');
+    const qualityId = (() => {
+      if (ext && ext.qualityOptions.length > 0) {
+        if (quality && ext.qualityOptions.some(q => q.id === quality.id)) return quality.id;
+        return (ext.qualityOptions.find(q => !q.isPreview) || ext.qualityOptions[0]).id;
+      }
+      return quality.engine === 'flac' ? 'FLAC' : 'BEST';
+    })();
     const result = await window.electronAPI.extensionsDownload({
       packageId: track.providerId,
       trackId: track.providerTrackId,
@@ -395,13 +396,13 @@ export async function downloadOnlineTrack(
     if (quality.engine === 'flac') {
       const result = await window.electronAPI.onlineDownloadTrack({ query, filename: safeTitle, format: 'flac', downloadId });
       cleanup();
-      if (result.success) return { success: true, path: result.path, isFallback: true, fallbackExt: 'flac' };
+      if (result.success) return { success: true, path: result.path, isFallback: false, fallbackExt: 'flac' };
       return { success: false, error: result.error, isFallback: true };
     }
     if (quality.engine === 'full') {
       const result = await window.electronAPI.onlineDownloadTrack({ query, filename: safeTitle, format: 'best', downloadId });
       cleanup();
-      if (result.success) return { success: true, path: result.path, isFallback: true };
+      if (result.success) return { success: true, path: result.path, isFallback: false };
       return { success: false, error: result.error, isFallback: true };
     }
     const source = resolveDownloadSource(track, quality);

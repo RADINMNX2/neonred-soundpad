@@ -73,5 +73,9 @@ module.exports = {
       }
     },
   },
-  plugins: [],
+  plugins: [
+    function ({ addVariant }) {
+      addVariant('rtl', '&:where([dir="rtl"], [dir="rtl"] *)');
+    },
+  ],
 }

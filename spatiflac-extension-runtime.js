@@ -11,7 +11,7 @@ function workerScriptPath(filename) {
   const src = path.join(__dirname, filename);
   const dest = path.join(app.getPath('userData'), 'runtime', filename);
   try {
-    if (!fs.existsSync(dest)) {
+    if (!fs.existsSync(dest) || fs.statSync(src).size !== fs.statSync(dest).size) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(src, dest);
     }
@@ -121,14 +121,20 @@ function listInstalled() {
           version: manifest.version || '0.0.0',
           description: manifest.description || '',
           types: manifest.type || [],
-          qualityOptions: (manifest.qualityOptions || []).map((q) => ({
-            id: String(q.id || 'best'),
-            label: q.label || q.id || 'Quality',
-            description: q.description || '',
-            ext: q.id && String(q.id).toLowerCase().includes('flac') ? 'flac' : (q.ext || 'mp3'),
-            available: true,
-            engine: q.id && String(q.id).toLowerCase().includes('flac') ? 'flac' : 'full'
-          })),
+          qualityOptions: (manifest.qualityOptions || []).map((q) => {
+            const idStr = String(q.id || 'best').toLowerCase();
+            const nameStr = String(q.label || q.id || '').toLowerCase();
+            const isPreview = /preview|sample|30\s*s/.test(idStr + ' ' + nameStr);
+            return {
+              id: String(q.id || 'best'),
+              label: q.label || q.id || 'Quality',
+              description: q.description || '',
+              ext: isPreview ? 'm4a' : (idStr.includes('flac') ? 'flac' : (q.ext || 'mp3')),
+              available: true,
+              isPreview,
+              engine: isPreview ? 'preview' : (idStr.includes('flac') ? 'flac' : 'full')
+            };
+          }),
           minAppVersion: manifest.minAppVersion || ''
         });
       } catch (err) {
@@ -229,7 +235,16 @@ async function installFromFile(filePath, packageId) {
   }
 }
 
+let _callQueue = Promise.resolve();
+
 function runExtensionCall(packageId, callType, args, opts) {
+  const run = () => runExtensionCallInner(packageId, callType, args, opts);
+  const result = _callQueue.then(run, run);
+  _callQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+function runExtensionCallInner(packageId, callType, args, opts) {
   return new Promise((resolve) => {
     const e = opts || {};
     const timeoutMs = e.timeoutMs || 30000;

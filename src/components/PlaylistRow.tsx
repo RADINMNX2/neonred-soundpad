@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef } from 'react';
 import { GripVertical, MoreVertical, Trash2, Music, Check, Play } from 'lucide-react';
 import { MusicTrack } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -34,7 +34,7 @@ interface PlaylistRowProps {
   onToggleSelect: (id: string) => void;
   onDragStart: (e: React.DragEvent<HTMLDivElement>, index: number) => void;
   onDragOverRow: (e: React.DragEvent<HTMLDivElement>, index: number) => void;
-  onDropRow: (index: number) => void;
+  onDropRow: (index: number, pos: 'top' | 'bottom') => void;
   onDragEnd: () => void;
 }
 
@@ -45,7 +45,17 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
   onDragStart, onDragOverRow, onDropRow, onDragEnd
 }) {
   const { t } = useLanguage();
+  const justDragged = useRef(false);
   const dropCls = dropPos === 'top' ? 'drop-indicator-top' : dropPos === 'bottom' ? 'drop-indicator-bottom' : '';
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onMoreToggle(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [moreOpen, onMoreToggle]);
 
   return (
     <div
@@ -53,9 +63,16 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
       draggable={reorderEnabled}
       onDragStart={(e) => onDragStart(e, index)}
       onDragOver={(e) => onDragOverRow(e, index)}
-      onDrop={(e) => { e.preventDefault(); onDropRow(index); }}
-      onDragEnd={onDragEnd}
-      onClick={() => (selectionMode ? onToggleSelect(track.id) : onPlay(track))}
+      onDrop={(e) => { e.preventDefault(); onDropRow(index, dropPos === 'bottom' ? 'bottom' : 'top'); }}
+      onDragEnd={() => {
+        justDragged.current = true;
+        window.setTimeout(() => { justDragged.current = false; }, 500);
+        onDragEnd();
+      }}
+      onClick={() => {
+        if (justDragged.current) { justDragged.current = false; return; }
+        selectionMode ? onToggleSelect(track.id) : onPlay(track);
+      }}
       onContextMenu={(e) => { e.preventDefault(); onDetails(track); }}
       style={{ animationDelay: `${staggerDelay}ms` }}
       className={`track-enter group relative flex items-center gap-3 h-16 px-3 rounded-2xl cursor-pointer border transition-[transform,opacity] duration-200 active:scale-[0.99]
@@ -92,7 +109,7 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
 
       <div className={`relative w-12 h-12 rounded-xl overflow-hidden shadow-lg border border-white/10 shrink-0 z-10 transition-all duration-300 ${isCurrent && isPlaying ? 'ring-2 ring-pink-500/60 shadow-[0_0_18px_rgba(236,72,153,0.35)]' : ''}`}>
         {track.cover ? (
-          <img src={track.cover} alt="Art" loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+          <img src={track.cover} alt="Art" draggable={false} loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
             <Music size={18} className="text-zinc-600" />
@@ -121,7 +138,10 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
         <div className="relative">
           <button
             onClick={(e) => { e.stopPropagation(); onMoreToggle(moreOpen ? null : track.id); }}
-            className="p-2 text-gray-500 hover:text-white hover:bg-white/10 rounded-xl transition-all opacity-0 group-hover:opacity-100 translate-x-2 rtl:-translate-x-2 group-hover:translate-x-0 group-hover:rtl:translate-x-0"
+            aria-label="More"
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            className="relative z-40 p-2 text-gray-500 hover:text-white hover:bg-white/10 rounded-xl transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 translate-x-2 rtl:-translate-x-2 group-hover:translate-x-0 group-hover:rtl:translate-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500/60"
             title="More"
           >
             <MoreVertical size={16} />
@@ -129,14 +149,14 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
           {moreOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={(e) => { e.stopPropagation(); onMoreToggle(null); }} />
-              <div className="absolute z-40 end-0 bottom-10 w-40 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/80 animate-slide-up overflow-hidden">
-                <button onClick={(e) => { e.stopPropagation(); onMoreToggle(null); onPlay(track); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold text-gray-200 hover:bg-white/10 transition-colors">
+              <div role="menu" aria-label="Track actions" className={`absolute z-40 ${index < 3 ? 'top-10' : 'bottom-10'} end-0 w-40 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/80 animate-slide-up overflow-hidden`}>
+                <button role="menuitem" onClick={(e) => { e.stopPropagation(); onMoreToggle(null); onPlay(track); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold text-gray-200 hover:bg-white/10 transition-colors">
                   <Play size={13} className="text-pink-500" /> {t('playNow')}
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); onMoreToggle(null); onDetails(track); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold text-gray-200 hover:bg-white/10 transition-colors">
+                <button role="menuitem" onClick={(e) => { e.stopPropagation(); onMoreToggle(null); onDetails(track); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold text-gray-200 hover:bg-white/10 transition-colors">
                   <Music size={13} className="text-pink-500" /> {t('trackDetails')}
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); onMoreToggle(null); onDelete(track.id); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold text-red-400 hover:bg-red-500/10 transition-colors">
+                <button role="menuitem" onClick={(e) => { e.stopPropagation(); onMoreToggle(null); onDelete(track.id); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold text-red-400 hover:bg-red-500/10 transition-colors">
                   <Trash2 size={13} /> {t('removeTrack')}
                 </button>
               </div>
@@ -147,7 +167,8 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
         {!selectionMode && (
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(track.id); }}
-            className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100 translate-x-2 rtl:-translate-x-2 group-hover:translate-x-0 group-hover:rtl:translate-x-0"
+            aria-label={t('removeTrack')}
+            className="p-2 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 translate-x-2 rtl:-translate-x-2 group-hover:translate-x-0 group-hover:rtl:translate-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500/60"
           >
             <Trash2 size={16} />
           </button>

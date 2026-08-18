@@ -177,7 +177,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           artist: track.artist,
           album: track.album,
           url: track.previewUrl,
-          duration: track.duration || 30,
+          duration: 30,
           cover: track.cover,
           onlineId: track.id,
         };
@@ -185,7 +185,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         onlineMappedRef.current[track.id] = idx;
         setCurrentTrackIndex(idx);
         setIsPlaying(true);
-        return { success: true, isPreview: true };
+        return { success: true, isPreview: true, error: resolved.error || 'Full track unavailable' };
       }
       return { success: false, error: resolved.error || 'No stream available' };
     } catch (e: any) {
@@ -593,30 +593,35 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const handleFileAdd = async (files: FileList | null) => {
     if (!files) return;
     setIsAdding(true);
-    const newTracks: MusicTrack[] = [];
-    
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|flac|ogg|m4a)$/i)) continue;
-        const originalPath = (file as any).path;
-        let url = originalPath ? `file://${originalPath}` : await fileToBase64(file);
+    try {
+      const newTracks: MusicTrack[] = [];
+      
+      for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|flac|ogg|m4a)$/i)) continue;
+          const originalPath = (file as any).path;
+          let url = originalPath ? `file://${originalPath}` : await fileToBase64(file);
 
-        let title = file.name.replace(/\.[^/.]+$/, "");
-        let artist = t('unknownArtist');
-        let album = "Unknown Album";
-        let cover = undefined;
-        
-        const meta = await parseAudioMetadata(file);
-        if (meta.title) title = meta.title;
-        if (meta.artist) artist = meta.artist;
-        if (meta.album) album = meta.album;
-        if (meta.cover) cover = meta.cover;
-        if (!cover) cover = await extractAlbumArt(file);
-        
-        newTracks.push({ id: crypto.randomUUID(), title, artist, album, url, path: originalPath, duration: 0, cover });
+          let title = file.name.replace(/\.[^/.]+$/, "");
+          let artist = t('unknownArtist');
+          let album = "Unknown Album";
+          let cover = undefined;
+          
+          const meta = await parseAudioMetadata(file);
+          if (meta.title) title = meta.title;
+          if (meta.artist) artist = meta.artist;
+          if (meta.album) album = meta.album;
+          if (meta.cover) cover = meta.cover;
+          if (!cover) cover = await extractAlbumArt(file);
+          
+          newTracks.push({ id: crypto.randomUUID(), title, artist, album, url, path: originalPath, duration: 0, cover });
+      }
+      setPlaylist(prev => [...prev, ...newTracks]);
+    } catch (err) {
+      console.error('Failed to add files', err);
+    } finally {
+      setIsAdding(false);
     }
-    setPlaylist(prev => [...prev, ...newTracks]);
-    setIsAdding(false);
   };
 
   const filteredTracks = useMemo(() => {
@@ -643,39 +648,40 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   const reorderEnabled = !isSelectionMode && !searchQuery.trim();
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+  const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, index: number) => {
     e.dataTransfer.setData('text/plain', String(index));
     e.dataTransfer.effectAllowed = 'move';
     setDragFrom(index);
     setDropPos(null);
-  };
+  }, []);
 
-  const handleDragOverRow = (e: React.DragEvent<HTMLDivElement>, index: number) => {
-    if (dragFrom === null) return;
+  const handleDragOverRow = useCallback((e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('text/plain')) e.preventDefault();
+    if (dragFrom === null || index === dragFrom) return;
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const pos = e.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom';
     setDropPos(prev => (prev && prev.index === index && prev.pos === pos ? prev : { index, pos }));
-  };
+  }, [dragFrom]);
 
-  const handleDropRow = (index: number) => {
-    if (dragFrom === null) return;
+  const handleDropRow = useCallback((index: number, pos: 'top' | 'bottom') => {
+    if (dragFrom === null || index === dragFrom) return;
     setPlaylist(prev => {
       const next = [...prev];
       const [moved] = next.splice(dragFrom, 1);
-      let to = index;
-      if (dragFrom < index) to = index - 1;
+      let to = index + (pos === 'bottom' ? 1 : 0);
+      if (dragFrom < index) to -= 1;
       next.splice(to, 0, moved);
       return next;
     });
     setDragFrom(null);
     setDropPos(null);
-  };
+  }, [dragFrom]);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     setDragFrom(null);
     setDropPos(null);
-  };
+  }, []);
 
   const scrollToCurrentTrack = useCallback(() => {
     const container = playlistScrollRef.current;
@@ -738,12 +744,40 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setPlaylist(prev => prev.map(t => t.id === id ? { ...t, title: newTitle } : t));
   };
 
-  const formatTime = (seconds: number) => {
+  const formatTime = useCallback((seconds: number) => {
     if (!seconds || isNaN(seconds)) return "0:00";
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  }, []);
+
+  const handlePlayTrack = useCallback((tr: MusicTrack) => {
+    setOnlineSession(null);
+    const i = playlist.findIndex(p => p.id === tr.id);
+    if (i === -1) return;
+    setCurrentTrackIndex(i);
+    setIsPlaying(true);
+  }, [playlist]);
+
+  const handleDeleteTrack = useCallback((id: string) => {
+    setTrackToDelete(id);
+    setTracksToDeleteCount(1);
+    setDeleteConfirmOpen(true);
+  }, []);
+
+  const handleDetailsTrack = useCallback((tr: MusicTrack) => {
+    setDetailsTrack(tr);
+    setIsMusicDetailsOpen(true);
+  }, []);
+
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedTrackIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }, []);
 
   const handleSwitchToMini = () => {
       if (window.electronAPI) {
@@ -996,11 +1030,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                             dropPos={dropPos && dropPos.index === index ? dropPos.pos : null}
                                             staggerDelay={Math.min(index * 24, 400)}
                                             formatTime={formatTime}
-                                            onPlay={(tr) => { setOnlineSession(null); const i = playlist.findIndex(p => p.id === tr.id); setCurrentTrackIndex(i); setIsPlaying(true); }}
-                                            onDelete={(id) => { setTrackToDelete(id); setTracksToDeleteCount(1); setDeleteConfirmOpen(true); }}
-                                            onDetails={(tr) => { setDetailsTrack(tr); setIsMusicDetailsOpen(true); }}
+                                            onPlay={handlePlayTrack}
+                                            onDelete={handleDeleteTrack}
+                                            onDetails={handleDetailsTrack}
                                             onMoreToggle={setMoreMenuId}
-                                            onToggleSelect={(id) => setSelectedTrackIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
+                                            onToggleSelect={handleToggleSelect}
                                             onDragStart={handleDragStart}
                                             onDragOverRow={handleDragOverRow}
                                             onDropRow={handleDropRow}
@@ -1027,11 +1061,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                     dropPos={null}
                                     staggerDelay={Math.min(idx * 24, 400)}
                                     formatTime={formatTime}
-                                    onPlay={(tr) => { setOnlineSession(null); const i = playlist.findIndex(p => p.id === tr.id); setCurrentTrackIndex(i); setIsPlaying(true); }}
-                                    onDelete={(id) => { setTrackToDelete(id); setTracksToDeleteCount(1); setDeleteConfirmOpen(true); }}
-                                    onDetails={(tr) => { setDetailsTrack(tr); setIsMusicDetailsOpen(true); }}
+                                    onPlay={handlePlayTrack}
+                                    onDelete={handleDeleteTrack}
+                                    onDetails={handleDetailsTrack}
                                     onMoreToggle={setMoreMenuId}
-                                    onToggleSelect={(id) => setSelectedTrackIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
+                                    onToggleSelect={handleToggleSelect}
                                     onDragStart={handleDragStart}
                                     onDragOverRow={handleDragOverRow}
                                     onDropRow={handleDropRow}

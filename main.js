@@ -627,8 +627,11 @@ function downloadUrl(url, destPath, onProgress) {
   return new Promise((resolve, reject) => {
     const follow = (u, redirectsLeft) => {
       let req;
+      const mod = /^http:/.test(u) ? require('http') : https;
       try {
-        req = https.get(u, (res) => {
+        req = mod.get(u, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) NeonRedSoundPad/2.1' }
+        }, (res) => {
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             res.resume();
             if (redirectsLeft <= 0) return reject(new Error('Too many redirects'));
@@ -646,10 +649,21 @@ function downloadUrl(url, destPath, onProgress) {
             if (total > 0) onProgress(received / total);
           });
           res.pipe(stream);
-          stream.on('finish', () => stream.close(() => resolve()));
+          stream.on('finish', () => stream.close(() => {
+            if (total > 0 && received < total) {
+              fs.unlink(destPath, () => {});
+              return reject(new Error('Download incomplete'));
+            }
+            if (received < 1024) {
+              fs.unlink(destPath, () => {});
+              return reject(new Error('Downloaded file too small'));
+            }
+            resolve();
+          }));
           stream.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
           res.on('error', (err) => { stream.destroy(); fs.unlink(destPath, () => {}); reject(err); });
         }).on('error', reject);
+        req.setTimeout(120000, () => { try { req.destroy(new Error('Download timed out')); } catch (e) {} });
       } catch (err) {
         return reject(err);
       }
@@ -689,15 +703,10 @@ ipcMain.handle('online-download', async (event, opts) => {
 
 // ============================================================================
 // ONLINE MUSIC ENGINE (Spatiflac full-track + FLAC)
-// Full tracks are resolved through the YouTube full-track engine (ytdl-core +
-// yt-search) and cached locally. FLAC is produced by lossless conversion with
-// FFmpeg — no account required.
+// Full tracks are resolved through the yt-dlp engine (bundled binary) and
+// cached locally. FLAC is produced by lossless conversion with FFmpeg — no
+// account required.
 // ============================================================================
-
-let _ytdl = null;
-let _ytsearch = null;
-function loadYtdl() { if (!_ytdl) _ytdl = require('ytdl-core'); return _ytdl; }
-function loadYtSearch() { if (!_ytsearch) _ytsearch = require('yt-search'); return _ytsearch; }
 
 function onlineBaseDir() { return path.join(app.getPath('music'), 'NeonRed Spatiflac'); }
 function onlineCacheDir() { return path.join(onlineBaseDir(), '.cache'); }
@@ -718,33 +727,147 @@ function sanitizeCachePart(value) {
   return String(value == null ? '' : value).replace(/[^a-zA-Z0-9]/g, '-');
 }
 
-async function resolveYoutubeStream(query) {
-  const ytsearch = loadYtSearch();
-  const result = await ytsearch(query);
-  const video = result.videos && result.videos[0];
-  if (!video) throw new Error('No matching track found on the full-track engine');
-  const info = await loadYtdl().getInfo(video.videoId);
-  const format = loadYtdl().chooseFormat(info.formats, { quality: 'highestaudio' });
-  if (!format) throw new Error('No audio stream available');
-  return { videoId: video.videoId, format };
+function ytDlpBinaryPath() {
+  if (_ytdlpPath && fs.existsSync(_ytdlpPath) && fs.statSync(_ytdlpPath).size > 5 * 1024 * 1024) return _ytdlpPath;
+  const candidate = path.join(__dirname, 'node_modules', 'youtube-dl-exec', 'bin', 'yt-dlp.exe');
+  const dest = path.join(app.getPath('userData'), 'bin', 'yt-dlp.exe');
+  try {
+    if (!fs.existsSync(candidate) || fs.statSync(candidate).size < 5 * 1024 * 1024) {
+      throw new Error('yt-dlp binary not found');
+    }
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    if (!fs.existsSync(dest) || fs.statSync(dest).size !== fs.statSync(candidate).size) {
+      fs.copyFileSync(candidate, dest);
+    }
+    _ytdlpPath = dest;
+    return dest;
+  } catch (e) {
+    log.error('Failed to extract yt-dlp binary', e);
+    return null;
+  }
 }
 
-function downloadYoutubeTo(videoId, format, destPath, onProgress) {
+let _ytdlpPath = null;
+
+function runYtDlp(args, timeoutMs, onStdoutLine) {
   return new Promise((resolve, reject) => {
-    const stream = loadYtdl()(videoId, { format });
-    const file = fs.createWriteStream(destPath);
-    stream.on('progress', (chunkLen, downloaded, total) => {
-      if (total > 0) onProgress(downloaded / total);
+    const bin = ytDlpBinaryPath();
+    if (!bin) return reject(new Error('yt-dlp engine unavailable'));
+    let proc;
+    try {
+      proc = spawn(bin, args, { windowsHide: true });
+    } catch (e) {
+      return reject(e);
+    }
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const settle = (fn, val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn(val);
+    };
+    const timer = setTimeout(() => {
+      try { proc.kill(); } catch (e) {}
+      settle(reject, new Error('Engine timed out'));
+    }, timeoutMs);
+    proc.stdout.on('data', (d) => {
+      const s = d.toString();
+      stdout += s;
+      if (onStdoutLine) { try { onStdoutLine(s); } catch (e) {} }
     });
-    stream.pipe(file);
-    file.on('finish', () => file.close(() => resolve()));
-    stream.on('error', (err) => { file.destroy(); fs.unlink(destPath, () => {}); reject(err); });
-    file.on('error', (err) => {
-      stream.destroy();
-      try { fs.unlinkSync(destPath); } catch (e) {}
-      reject(err);
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => settle(reject, err));
+    proc.on('close', (code) => {
+      if (code === 0) settle(resolve, { stdout, stderr });
+      else {
+        const errLine = stderr.split('\n').filter((l) => /^ERROR/.test(l)).slice(-1)[0];
+        settle(reject, new Error(errLine || stderr.slice(-300) || 'yt-dlp failed'));
+      }
     });
   });
+}
+
+const YTDLP_COMMON = ['--no-playlist', '--no-warnings', '--socket-timeout', '20', '--retries', '3'];
+
+function pickBestAudioFormats(info) {
+  const formats = Array.isArray(info.formats) ? info.formats : [];
+  const audioOnly = formats.filter((f) => f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'));
+  if (audioOnly.length === 0) {
+    return formats
+      .filter((f) => f.acodec && f.acodec !== 'none' && f.vcodec && f.vcodec !== 'none')
+      .sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
+  }
+  return audioOnly.sort((a, b) => (b.abr || 0) - (a.abr || 0) || (b.tbr || 0) - (a.tbr || 0));
+}
+
+async function resolveYoutubeStream(query) {
+  const { stdout } = await runYtDlp([...YTDLP_COMMON, '--dump-single-json', '--format', 'bestaudio/best', 'ytsearch1:' + query], 90000);
+  let info;
+  try {
+    info = JSON.parse(stdout);
+  } catch (e) {
+    throw new Error('Engine returned invalid response');
+  }
+  if (!info || !info.id) throw new Error('No matching track found on the full-track engine');
+  const formats = pickBestAudioFormats(info);
+  if (formats.length === 0) throw new Error('No audio stream available');
+  const best = formats[0];
+  return {
+    videoId: info.id,
+    webpageUrl: info.webpage_url || info.original_url || ('https://www.youtube.com/watch?v=' + info.id),
+    title: info.title || 'Unknown',
+    duration: info.duration || 0,
+    formatId: String(best.format_id),
+    ext: String(best.ext || 'm4a'),
+    infoJson: info
+  };
+}
+
+function loadInfoJsonToTemp(info) {
+  const dir = path.join(app.getPath('temp'), 'neonred-sflx');
+  fs.mkdirSync(dir, { recursive: true });
+  const p = path.join(dir, crypto.randomUUID() + '.info.json');
+  fs.writeFileSync(p, JSON.stringify(info));
+  return p;
+}
+
+function validAudioFile(p) {
+  try {
+    return fs.statSync(p).size >= 256 * 1024;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function downloadYoutubeTo(resolved, destPath, onProgress, timeoutMs) {
+  const infoJson = loadInfoJsonToTemp(resolved.infoJson);
+  const base = destPath.slice(0, -path.extname(destPath).length);
+  try {
+    const args = [...YTDLP_COMMON, '--load-info-json', infoJson, '--format', resolved.formatId, '--newline', '-o', base + '.%(ext)s'];
+    await runYtDlp(args, timeoutMs || 600000, (line) => {
+      const m = /\[download\]\s+([\d.]+)%/.exec(line);
+      if (m && onProgress) onProgress(Math.min(1, parseFloat(m[1]) / 100));
+    });
+  } finally {
+    try { fs.unlinkSync(infoJson); } catch (e) {}
+  }
+  if (fs.existsSync(destPath)) {
+    if (validAudioFile(destPath)) return;
+    fs.unlinkSync(destPath);
+    throw new Error('Downloaded file is too small');
+  }
+  const dir = path.dirname(base);
+  const files = fs.readdirSync(dir).filter((f) => !f.endsWith('.part') && !f.endsWith('.ytdl'));
+  const match = files.find((f) => f.startsWith(path.basename(base) + '.'));
+  if (!match) throw new Error('Engine finished without producing a file');
+  const produced = path.join(dir, match);
+  if (!validAudioFile(produced)) {
+    fs.unlinkSync(produced);
+    throw new Error('Downloaded file is too small');
+  }
+  fs.renameSync(produced, destPath);
 }
 
 function ffmpegBinaryPath() {
@@ -752,31 +875,44 @@ function ffmpegBinaryPath() {
   if (!src) return null;
   const dest = path.join(app.getPath('userData'), 'bin', path.basename(src));
   try {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    if (!fs.existsSync(dest) || fs.statSync(dest).size < 1024 * 1024) {
       fs.copyFileSync(src, dest);
     }
     return dest;
   } catch (e) {
     log.error('Failed to extract ffmpeg binary', e);
-    return src;
+    return null;
   }
 }
 
-function downloadYoutubeFlac(videoId, format, destPath, onProgress) {
-  return new Promise((resolve, reject) => {
+async function downloadYoutubeFlac(resolved, destPath, onProgress) {
+  const tmpDir = path.join(app.getPath('temp'), 'neonred-sflx');
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const tmpBase = path.join(tmpDir, crypto.randomUUID());
+  const tmpAudio = tmpBase + '.' + resolved.ext;
+  try {
+    await downloadYoutubeTo(resolved, tmpAudio, (p) => { if (onProgress) onProgress(p * 0.85); }, 600000);
     const ffmpegPath = ffmpegBinaryPath();
-    if (!ffmpegPath) return reject(new Error('FFmpeg binary not found'));
-    const stream = loadYtdl()(videoId, { format });
-    const ff = spawn(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-vn', '-c:a', 'flac', '-compression_level', '8', '-y', destPath]);
-    stream.pipe(ff.stdin);
-    ff.on('close', (code) => {
-      if (code === 0) resolve();
-      else { fs.unlink(destPath, () => {}); reject(new Error('FLAC conversion failed')); }
+    if (!ffmpegPath) throw new Error('FFmpeg binary not found');
+    await new Promise((resolve, reject) => {
+      const ff = spawn(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-i', tmpAudio, '-vn', '-c:a', 'flac', '-compression_level', '5', '-y', destPath], { windowsHide: true });
+      let stderr = '';
+      ff.stderr.on('data', (d) => { stderr += d.toString(); });
+      ff.on('close', (code) => {
+        if (code === 0 && validAudioFile(destPath)) {
+          if (onProgress) onProgress(1);
+          resolve();
+        } else {
+          try { fs.unlinkSync(destPath); } catch (e) {}
+          reject(new Error('FLAC conversion failed: ' + stderr.slice(-200)));
+        }
+      });
+      ff.on('error', (err) => { try { fs.unlinkSync(destPath); } catch (e) {} reject(err); });
     });
-    ff.on('error', (err) => { stream.destroy(); fs.unlink(destPath, () => {}); reject(err); });
-    stream.on('error', (err) => { ff.kill(); fs.unlink(destPath, () => {}); reject(err); });
-  });
+  } finally {
+    try { fs.unlinkSync(tmpAudio); } catch (e) {}
+  }
 }
 
 function uniquePath(dir, filename) {
@@ -847,14 +983,20 @@ ipcMain.handle('extensions-install', async (event, reg) => {
         version: manifest.version,
         description: manifest.description,
         types: manifest.type || [],
-        qualityOptions: (manifest.qualityOptions || []).map((q) => ({
-          id: String(q.id || 'best'),
-          label: q.label || q.id || 'Quality',
-          description: q.description || '',
-          ext: q.id && String(q.id).toLowerCase().includes('flac') ? 'flac' : (q.ext || 'mp3'),
-          available: true,
-          engine: q.id && String(q.id).toLowerCase().includes('flac') ? 'flac' : 'full'
-        }))
+        qualityOptions: (manifest.qualityOptions || []).map((q) => {
+          const idStr = String(q.id || 'best').toLowerCase();
+          const nameStr = String(q.label || q.id || '').toLowerCase();
+          const isPreview = /preview|sample|30\s*s/.test(idStr + ' ' + nameStr);
+          return {
+            id: String(q.id || 'best'),
+            label: q.label || q.id || 'Quality',
+            description: q.description || '',
+            ext: isPreview ? 'm4a' : (idStr.includes('flac') ? 'flac' : (q.ext || 'mp3')),
+            available: true,
+            isPreview,
+            engine: isPreview ? 'preview' : (idStr.includes('flac') ? 'flac' : 'full')
+          };
+        })
       }
     };
   } catch (error) {
@@ -946,17 +1088,22 @@ ipcMain.handle('online-full-track', async (event, opts) => {
     if (!query) return { success: false, error: 'Missing search query' };
     const dir = onlineCacheDir();
     await fs.promises.mkdir(dir, { recursive: true });
-    const { videoId, format } = await resolveYoutubeStream(query);
-    const base = `cache-${sanitizeCachePart(videoId)}-${sanitizeCachePart(cacheKey || query)}`;
+    const resolved = await resolveYoutubeStream(query);
+    const base = `cache-${sanitizeCachePart(resolved.videoId)}-${sanitizeCachePart(cacheKey || query)}`;
     const existing = await fs.promises.readdir(dir).catch(() => []);
     const match = existing.find(f => f.indexOf(base + '.best.') === 0);
-    if (match) return { success: true, path: path.join(dir, match), cached: true };
+    if (match) {
+      const cachedPath = path.join(dir, match);
+      if (validAudioFile(cachedPath)) {
+        return { success: true, path: cachedPath, cached: true, format: path.extname(match).slice(1), duration: resolved.duration };
+      }
+      try { fs.unlinkSync(cachedPath); } catch (e) {}
+    }
 
-    const ext = String(format.mimeType || '').split('/')[1]?.split(';')[0] || 'm4a';
-    const destPath = path.join(dir, `${base}.best.${ext}`);
+    const destPath = path.join(dir, `${base}.best.${resolved.ext}`);
     const sendProgress = makeProgressSender(event, downloadId || crypto.randomUUID());
-    await downloadYoutubeTo(videoId, format, destPath, sendProgress);
-    return { success: true, path: destPath, cached: false, format: ext };
+    await downloadYoutubeTo(resolved, destPath, sendProgress);
+    return { success: true, path: destPath, cached: false, format: resolved.ext, duration: resolved.duration };
   } catch (error) {
     return { success: false, error: error.message || 'Full-track resolution failed' };
   }
@@ -976,19 +1123,18 @@ ipcMain.handle('online-download-track', async (event, opts) => {
     }
 
     if (!query) return { success: false, error: 'Missing search query' };
-    const { videoId, format: audioFormat } = await resolveYoutubeStream(query);
-    const cacheBase = `cache-${sanitizeCachePart(videoId)}-${sanitizeCachePart(filename || 'track')}`;
+    const resolved = await resolveYoutubeStream(query);
+    const cacheBase = `cache-${sanitizeCachePart(resolved.videoId)}-${sanitizeCachePart(filename || 'track')}`;
     if (format === 'flac') {
       const destPath = path.join(baseDir, `${cacheBase}.flac`);
-      if (fs.existsSync(destPath)) return { success: true, path: destPath, cached: true };
-      await downloadYoutubeFlac(videoId, audioFormat, destPath, sendProgress);
+      if (validAudioFile(destPath)) return { success: true, path: destPath, cached: true };
+      await downloadYoutubeFlac(resolved, destPath, sendProgress);
       return { success: true, path: destPath };
     }
 
-    const ext = String(audioFormat.mimeType || '').split('/')[1]?.split(';')[0] || 'm4a';
-    const destPath = path.join(baseDir, `${cacheBase}.${ext}`);
-    if (fs.existsSync(destPath)) return { success: true, path: destPath, cached: true };
-    await downloadYoutubeTo(videoId, audioFormat, destPath, sendProgress);
+    const destPath = path.join(baseDir, `${cacheBase}.${resolved.ext}`);
+    if (validAudioFile(destPath)) return { success: true, path: destPath, cached: true };
+    await downloadYoutubeTo(resolved, destPath, sendProgress);
     return { success: true, path: destPath };
   } catch (error) {
     return { success: false, error: error.message || 'Download failed' };
