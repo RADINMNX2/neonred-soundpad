@@ -16,6 +16,30 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.6.0",
+    date: "2026-09-08",
+    features: {
+      added: [
+        "Waveform Seek Bar: the thin progress bar is now a living waveform of your actual song — 40 glowing bars dance to the real audio frequencies, the played part glows in your visualizer color while the rest stays as a calm ghost. On every track change the bar melts down and rises again with the new song's own waves, with a soft shimmer sweeping across.",
+        "Modern Volume Control: the native slider is replaced with a smooth glass volume bar — a gradient fill that springs back with a bouncy ease, a glowing white knob that grows on hover, and a one-tap mute button that remembers your previous level and restores it.",
+      ],
+      fixed: [
+        "Artist, album and cover art finally load for library-scanned music and files opened from your file manager — metadata is now read safely in the app's own process (no more blocked online library).",
+        "Cover art stays on the now-playing card after a track is enriched — previously the freshly-read cover could disappear the moment metadata arrived.",
+      ]
+    },
+    featuresFa: {
+      added: [
+        "نوار سیـک ویـف‌شکل: نوار پیشرفت باریک قبلی حالا یه موجِ زنده از خود آهنگته — ۴۰ ستون می‌درخشن و با فرکانس‌های واقعی صدا می‌رقصن؛ قسمت پخش‌شده با رنگ ویژوالایزت می‌درخشه و بقیه به‌صورت یک سایهٔ آروم می‌مونه. با هر بار عوض‌شدن آهنگ، نوار آب می‌شه و با موج‌های خودِ ترکِ جدید دوباره بالا میاد و یه درخشش نرم از روش رد می‌شه.",
+        "کنترل صدای مدرن: اسلایدر قدیمی کنار رفت و جاش یه نوار شیشه‌ای نرم اومده — پر شدنِ پرشی با یه فنر نرم، یه دستگیرهٔ سفید درخشان که وقتی موس روشه بزرگ می‌شه، و یه دکمهٔ میوت یک‌لمسی که مقدار قبلی صدا رو یادش می‌مونه و همونو برمی‌گردونه.",
+      ],
+      fixed: [
+        "نام خواننده، آلبوم و کاور برای آهنگ‌های کتابخانه و فایل‌هایی که از مدیریت فایل باز می‌شن بالاخره لود می‌شن — متادیتا حالا امن‌تر توی خودِ پروسهٔ برنامه خونده می‌شه (دیگه خبری از کتابخونهٔ آنلاین مسدودشده نیست).",
+        "کاور بعد از بارگذاری اطلاعات، روی کارت «در حال پخش» ثابت می‌مونه — قبلاً ممکن بود کاور تازه‌خوانده‌شده همون لحظه که متادیتا می‌رسید ناپدید بشه.",
+      ]
+    }
+  },
+  {
     version: "2.5.0",
     date: "2026-09-08",
     features: {

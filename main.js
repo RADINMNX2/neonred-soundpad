@@ -615,7 +615,6 @@ function parseVorbisComments(buf, start, size) {
   }
   return null;
 }
-
 ipcMain.handle('delete-sound-file', async (event, filePath) => {
   try {
     if (!filePath) return { success: false };
@@ -635,11 +634,44 @@ ipcMain.handle('delete-sound-file', async (event, filePath) => {
 });
 
 // --- Smart Music Library (fast folder scanning, never copies files) ---
+const { parseFile: parseAudioFileMeta } = require('music-metadata');
 const LIBRARY_AUDIO_EXTS = new Map([
   ['.mp3', true], ['.wav', true], ['.flac', true], ['.ogg', true], ['.m4a', true],
   ['.aac', true], ['.opus', true], ['.wma', true], ['.m4b', true], ['.webm', true],
 ]);
 let libraryScanActive = false;
+
+// Read full audio metadata (title/artist/album/cover/duration/lyrics) in the main process —
+// reliable for local file paths without depending on renderer fetch(file://) or external CDNs.
+ipcMain.handle('library:read-meta', async (event, filePath) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') return null;
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile()) return null;
+    const ext = path.extname(filePath).toLowerCase();
+    if (!LIBRARY_AUDIO_EXTS.has(ext)) return null;
+    const result = await parseAudioFileMeta(filePath, { duration: true });
+    const common = result ? result.common : undefined;
+    const format = result ? result.format : undefined;
+    const c = common && common.picture && common.picture[0];
+    let cover;
+    if (c && c.data && c.data.length > 0 && c.data.length <= 1024 * 1024) {
+      const mime = c.mimeType || c.format || 'image/jpeg';
+      cover = 'data:' + mime + ';base64,' + Buffer.from(c.data).toString('base64');
+    }
+    const lyrics = common && typeof common.lyrics === 'string' ? common.lyrics : undefined;
+    return {
+      title: common && common.title ? String(common.title) : undefined,
+      artist: common && common.artist ? String(common.artist) : undefined,
+      album: common && common.album ? String(common.album) : undefined,
+      duration: format && Number.isFinite(format.duration) ? format.duration : undefined,
+      cover,
+      lyrics,
+    };
+  } catch (e) {
+    return null;
+  }
+});
 
 // Iterative recursive walk with a small worker pool — fast, no stack limits, symlinks ignored.
 function collectAudioFiles(rootDir, onChunk, chunkSize) {

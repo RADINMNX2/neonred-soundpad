@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { 
   Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, 
-  ListMusic, Music, Volume2, Trash2, Plus, Disc, Sliders, X, MousePointer2, Settings, Shrink, Globe, FileText, Search, XCircle, ChevronUp,
+  ListMusic, Music, Volume2, VolumeX, Trash2, Plus, Disc, Sliders, X, MousePointer2, Settings, Shrink, Globe, FileText, Search, XCircle, ChevronUp,
   Folder, FolderPlus, Library, RefreshCw, HardDrive, Loader2
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
@@ -10,6 +10,8 @@ import { MusicTrack, ExtendedAudioElement, VisualizerConfig, SpatiflacExtension,
 import { fileToBase64, extractAlbumArt, getDominantColor, parseAudioMetadata } from '../utils/audioHelpers';
 import { buildLrcPath } from '../utils/lyrics';
 import RealTimeVisualizer from '../components/RealTimeVisualizer';
+import VisualizerSeekBar from '../components/VisualizerSeekBar';
+import VolumeSlider from '../components/VolumeSlider';
 import EqualizerModal from '../components/EqualizerModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import MusicDetailsModal from '../components/MusicDetailsModal';
@@ -95,6 +97,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1.0);
+  const [isMuted, setIsMuted] = useState(false);
+  const prevVolumeRef = useRef(1.0);
   const [adaptiveColor, setAdaptiveColor] = useState<string>('#ef4444');
   
   // Player Settings (Visualizer)
@@ -226,19 +230,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       while (idx < target.length) {
         const t = target[idx++];
         try {
-          const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 4000);
-          const res = await fetch(`file://${t.path}`, { signal: ctrl.signal });
-          clearTimeout(timer);
-          const blob = await res.blob();
-          const meta = await parseAudioMetadata(blob);
-          updates[t.id] = {
-            ...t,
-            title: meta.title || t.title,
-            artist: meta.artist || t.artist,
-            album: meta.album || t.album,
-            duration: meta.duration || t.duration || 0,
-          };
+          const meta = await window.electronAPI.readTrackMeta(t.path!);
+          if (meta) {
+            updates[t.id] = {
+              ...t,
+              title: meta.title || t.title,
+              artist: meta.artist || t.artist,
+              album: meta.album || t.album,
+              cover: meta.cover || t.cover,
+              duration: meta.duration || t.duration || 0,
+            };
+          }
         } catch (e) { /* unreadable file — keep filename-based title */ }
       }
     };
@@ -521,7 +523,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   
   // Track the *intended* source string to compare against, avoiding browser encoding mismatches
   const currentAudioSrcRef = useRef<string | null>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
   
   // Handle Initial File from OS (Open With)
   useEffect(() => {
@@ -544,21 +545,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               let artist = tRef.current('unknownArtist');
               let album = "Unknown Album";
               let cover = undefined;
+              let metaDuration: number | undefined;
 
               try {
-                  const response = await fetch(`file://${filePath}`);
-                  const blob = await response.blob();
-                  const meta = await parseAudioMetadata(blob);
-                  if (meta.title) title = meta.title;
-                  if (meta.artist) artist = meta.artist;
-                  if (meta.album) album = meta.album;
-                  if (meta.cover) cover = meta.cover;
+                  const meta = await window.electronAPI.readTrackMeta(filePath);
+                  if (meta) {
+                      if (meta.title) title = meta.title;
+                      if (meta.artist) artist = meta.artist;
+                      if (meta.album) album = meta.album;
+                      if (meta.cover) cover = meta.cover;
+                      metaDuration = meta.duration;
+                  }
               } catch (e) { console.warn("Could not parse initial file metadata", e); }
 
               const newTrack: MusicTrack = {
                   id: tempId, title, artist, album, 
                   url: `file://${filePath}`, path: filePath, 
-                  duration: meta.duration || 0, cover
+                  duration: metaDuration || 0, cover
               };
               
               setPlaylist(prev => [newTrack, ...prev]);
@@ -906,6 +909,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   useEffect(() => {
       if (gainNodeRef.current) gainNodeRef.current.gain.setTargetAtTime(volume * masterVolume, audioContextRef.current?.currentTime || 0, 0.1);
   }, [volume, masterVolume]);
+
+  const toggleMute = useCallback(() => {
+      if (volume > 0.001) {
+          prevVolumeRef.current = volume;
+          setVolume(0);
+          setIsMuted(true);
+      } else {
+          setVolume(prevVolumeRef.current || 0.8);
+          setIsMuted(false);
+      }
+  }, [volume]);
+
+  useEffect(() => {
+      if (volume > 0.001 && isMuted) setIsMuted(false);
+  }, [volume, isMuted]);
 
   useEffect(() => {
       const audio = audioElementRef.current as ExtendedAudioElement;
@@ -1346,23 +1364,18 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <p className="text-gray-400 font-medium font-persian">{currentTrack?.artist || (playlist.length > 0 ? t('unknownArtist') : t('addSongsDesc'))}</p>
                 </div>
 
-                <div 
-                    className="w-full group/progress cursor-pointer" 
-                    role="slider"
-                    aria-label="Seek"
-                    aria-valuemin={0}
-                    aria-valuemax={duration || 0}
-                    aria-valuenow={Math.round(currentTime)}
-                    tabIndex={0}
-                    onClick={(e) => { if (!progressRef.current || !audioElementRef.current) return; if (!Number.isFinite(duration) || duration <= 0) return; const rect = progressRef.current.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const percent = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1); audioElementRef.current.currentTime = percent * duration; }}
-                    onTouchEnd={(e) => { if (!progressRef.current || !audioElementRef.current) return; if (!Number.isFinite(duration) || duration <= 0) return; const rect = progressRef.current.getBoundingClientRect(); const touch = e.changedTouches[0]; const percent = Math.min(Math.max((touch.clientX - rect.left) / rect.width, 0), 1); audioElementRef.current.currentTime = percent * duration; }}
-                    ref={progressRef}
-                >
+                <div className="w-full">
                     <div className="flex justify-between text-xs text-gray-500 font-mono mb-1" dir="ltr"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
-                    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden relative" dir="ltr">
-                        <div className="absolute top-0 left-0 h-full transition-all duration-300 relative" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`, backgroundColor: activeVisColor }}></div>
-                        <div className="absolute inset-0 bg-white/0 group-hover/progress:bg-white/10 transition-colors"></div>
-                    </div>
+                    <VisualizerSeekBar
+                        analyser={analyserRef.current}
+                        isPlaying={isPlaying}
+                        color={activeVisColor}
+                        config={visualizerConfig}
+                        currentTime={currentTime}
+                        duration={duration}
+                        trackKey={currentTrack?.id ?? 'none'}
+                        onSeek={(seconds) => { if (audioElementRef.current) audioElementRef.current.currentTime = seconds; }}
+                    />
                 </div>
 
                 <div className="flex items-center justify-between px-4 mt-2" dir="ltr" role="group" aria-label="Playback controls">
@@ -1378,8 +1391,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 </div>
 
                  <div className="flex items-center gap-3 px-4 mt-2" dir="ltr">
-                    <Volume2 size={16} className="text-gray-500" aria-hidden="true" />
-                    <input type="range" min="0" max="1" step="0.05" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} aria-label="Volume" className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-500" />
+                    <button onClick={toggleMute} aria-label={isMuted ? 'Unmute' : 'Mute'} aria-pressed={isMuted} title={isMuted ? 'Unmute' : 'Mute'} className={`p-1.5 rounded-lg transition-all duration-300 hover:bg-white/5 hover:scale-110 active:scale-95 ${isMuted ? 'text-red-400' : 'text-gray-400'} cursor-pointer`}>
+                        {isMuted ? <VolumeX size={17} aria-hidden="true" /> : <Volume2 size={17} aria-hidden="true" />}
+                    </button>
+                    <VolumeSlider value={volume} onChange={setVolume} color={activeVisColor} />
                  </div>
             </div>
         </div>

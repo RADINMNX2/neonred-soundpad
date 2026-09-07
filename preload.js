@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pickMusicFolders: () => ipcRenderer.invoke('library:pick-folders'),
   scanLibrary: (folders) => ipcRenderer.send('library:scan', folders),
   filterMissingTracks: (paths) => ipcRenderer.invoke('library:filter-missing', paths),
+  readTrackMeta: (path) => ipcRenderer.invoke('library:read-meta', path),
   onLibraryScanChunk: (callback) => {
       const sub = (e, payload) => callback(payload);
       ipcRenderer.on('library:scan-chunk', sub);
