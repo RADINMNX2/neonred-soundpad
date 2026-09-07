@@ -35,6 +35,8 @@ const AppContent: React.FC = () => {
   const { setLanguage } = useLanguage();
   const { reportActivity, isLowPowerMode } = useSmartCore();
 
+  const endLoading = useCallback(() => setIsLoading(false), []);
+
   const EXIT_MS = isLowPowerMode ? 0 : 160;
   const ENTER_MS = isLowPowerMode ? 0 : 640;
 
@@ -225,7 +227,7 @@ const AppContent: React.FC = () => {
 
   return (
     <>
-      {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
+      {isLoading && <LoadingScreen onComplete={endLoading} />}
       
       <div className={`flex flex-col h-screen w-screen overflow-hidden bg-black text-white selection:bg-red-500 selection:text-white border border-red-900/20 rounded-lg transition-opacity duration-1000 ${isLoading ? 'opacity-0' : 'opacity-100'} ${isLowPowerMode ? 'motion-off' : ''}`}>
         

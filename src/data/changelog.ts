@@ -11,6 +11,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.3.0",
+    date: "2026-09-08",
+    features: {
+      added: [
+        "Turbo-Virtualized Playlist (the big one): the playlist now renders ONLY the rows you can actually see, no matter how huge it is. Even with 1,000,000 tracks the list stays buttery smooth — scrolling, search, select-mode and drag-to-reorder all work instantly instead of freezing and crashing the window.",
+        "Zero-Freeze Startup & Saving: giant playlists no longer block the renderer on launch, and saving is paused above 5,000 tracks so the app never stutters or dies while typing.",
+        "Crisper Text Everywhere: the running-track title and active lyric line no longer use GPU gradient-clipped text (the old technique rendered blurry on Windows) — they now render sharp neon with a soft glow instead.",
+      ],
+      fixed: [
+        "Fixed the 'page keeps refreshing' bug: the old code mounted every single song as a real element, so a big library would freeze the page until the window auto-reloaded in an endless loop. Now only ~20 rows are in the DOM at any moment.",
+        "Fixed the loading screen occasionally restarting or never finishing, caused by an unstable completion callback.",
+        "Fixed blurry/faded text on the active track title and current lyric line.",
+      ]
+    }
+  },
+  {
     version: "2.2.0",
     date: "2026-09-07",
     features: {

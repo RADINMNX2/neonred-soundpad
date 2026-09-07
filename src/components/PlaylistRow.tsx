@@ -18,6 +18,8 @@ export const EqualizerBars: React.FC<{ paused?: boolean }> = ({ paused }) => (
 interface PlaylistRowProps {
   track: MusicTrack;
   index: number;
+  displayIndex?: number;
+  virtualized?: boolean;
   isCurrent: boolean;
   isPlaying: boolean;
   isSelected: boolean;
@@ -39,7 +41,7 @@ interface PlaylistRowProps {
 }
 
 const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
-  track, index, isCurrent, isPlaying, isSelected, selectionMode, reorderEnabled,
+  track, index, displayIndex, virtualized, isCurrent, isPlaying, isSelected, selectionMode, reorderEnabled,
   moreOpen, dropPos, staggerDelay, formatTime,
   onPlay, onDelete, onDetails, onMoreToggle, onToggleSelect,
   onDragStart, onDragOverRow, onDropRow, onDragEnd
@@ -47,6 +49,7 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
   const { t } = useLanguage();
   const justDragged = useRef(false);
   const dropCls = dropPos === 'top' ? 'drop-indicator-top' : dropPos === 'bottom' ? 'drop-indicator-bottom' : '';
+  const rowNumber = (displayIndex !== undefined ? displayIndex : index) + 1;
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -75,7 +78,7 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
       }}
       onContextMenu={(e) => { e.preventDefault(); onDetails(track); }}
       style={{ animationDelay: `${staggerDelay}ms` }}
-      className={`track-enter group relative flex items-center gap-3 h-16 px-3 rounded-2xl cursor-pointer border transition-[transform,opacity] duration-200 active:scale-[0.99]
+      className={`${virtualized ? '' : 'track-enter'} group relative flex items-center gap-3 h-16 px-3 rounded-2xl cursor-pointer border transition-[transform,opacity] duration-200 active:scale-[0.99]
         ${dropCls}
         ${isSelected ? 'border-red-500/50 bg-red-900/20'
           : isCurrent ? 'border-pink-500/30'
@@ -103,7 +106,7 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
         ) : isCurrent ? (
           <EqualizerBars paused={!isPlaying} />
         ) : (
-          <span className="group-hover:text-white transition-colors">{index + 1}</span>
+          <span className="group-hover:text-white transition-colors">{rowNumber}</span>
         )}
       </div>
 
@@ -123,7 +126,7 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
       </div>
 
       <div className="flex-1 min-w-0 z-10">
-        <h4 className={`font-bold truncate text-sm mb-0.5 ${isCurrent ? 'text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-red-400' : 'text-gray-200 group-hover:text-white transition-colors'}`}>
+        <h4 className={`font-bold truncate text-sm mb-0.5 ${isCurrent ? 'text-pink-400 [text-shadow:0_0_14px_rgba(236,72,153,0.55)]' : 'text-gray-200 group-hover:text-white transition-colors'}`}>
           {track.title}
         </h4>
         <p className="text-xs text-gray-500 truncate font-medium group-hover:text-gray-400 transition-colors">

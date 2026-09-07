@@ -31,6 +31,37 @@ const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 // Pre-allocate typed arrays for audio processing to reduce garbage collection
 const AUDIO_BUFFER_SIZE = 256;
 
+// Virtual list geometry (must match the rendered row CSS)
+const TRACK_ROW_H = 72;   // 64px row + 8px mb-2 gap
+const HEADER_ROW_H = 34;  // sticky album header (height is pinned by inline style)
+const LIST_OVERSCAN = 4;  // rows buffered above/below the viewport
+const LIST_TOP_PAD = 16;  // top padding inside the scroll content
+const MAX_PERSIST_TRACKS = 5000; // above this, skip blocking localStorage writes
+
+type VirtualRow =
+  | { kind: 'header'; key: string; album: string; count: number }
+  | { kind: 'track'; key: string; track: MusicTrack; playlistIndex: number; displayIndex: number };
+
+interface VirtualLayout {
+  rows: VirtualRow[];
+  offsets: Float64Array;
+  heights: Float64Array;
+  totalHeight: number;
+  indexToRow: Map<number, number>;
+  idToIndex: Map<string, number>;
+  searchCount: number;
+}
+
+const EMPTY_LAYOUT: VirtualLayout = {
+  rows: [],
+  offsets: new Float64Array(0),
+  heights: new Float64Array(0),
+  totalHeight: 0,
+  indexToRow: new Map(),
+  idToIndex: new Map(),
+  searchCount: 0,
+};
+
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
   monitorDeviceId, 
   masterVolume,
@@ -82,6 +113,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   // Persist Settings (debounced playlist save to avoid excessive localStorage writes)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
+      if (playlist.length > MAX_PERSIST_TRACKS) {
+        console.warn(`Playlist too large (${playlist.length} tracks) to persist safely — skipping localStorage save to avoid freezing the renderer.`);
+        return;
+      }
       try {
         localStorage.setItem('music_playlist', JSON.stringify(playlist.map(({ lyrics, ...rest }) => rest)));
       } catch (err) {
@@ -656,46 +691,143 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     setIsAdding(false);
   };
 
-  const filteredTracks = useMemo(() => {
-    if (!searchQuery.trim()) return playlist;
-    const q = searchQuery.trim().toLocaleLowerCase();
-    return playlist.filter(track =>
-      track.title.toLocaleLowerCase().includes(q) ||
-      track.artist.toLocaleLowerCase().includes(q) ||
-      (track.album || '').toLocaleLowerCase().includes(q)
-    );
-  }, [playlist, searchQuery]);
+  const isSearching = !!searchQuery.trim();
 
-  const groupedTracks = useMemo(() => {
-    if (searchQuery.trim()) return null;
-    const groups: { album: string; tracks: { track: MusicTrack; index: number }[] }[] = [];
-    playlist.forEach((track, index) => {
-      const album = track.album || t('unknownAlbum');
-      const last = groups[groups.length - 1];
-      if (last && last.album === album) last.tracks.push({ track, index });
-      else groups.push({ album, tracks: [{ track, index }] });
+  const virtual = useMemo((): VirtualLayout => {
+    const indexToRow = new Map<number, number>();
+    const idToIndex = new Map<string, number>();
+    const rows: VirtualRow[] = [];
+
+    if (isSearching) {
+      const q = searchQuery.trim().toLocaleLowerCase();
+      const n = playlist.length;
+      let displayIdx = 0;
+      for (let i = 0; i < n; i++) {
+        const track = playlist[i];
+        idToIndex.set(track.id, i);
+        if (
+          track.title.toLocaleLowerCase().includes(q) ||
+          track.artist.toLocaleLowerCase().includes(q) ||
+          (track.album || '').toLocaleLowerCase().includes(q)
+        ) {
+          rows.push({ kind: 'track', key: track.id, track, playlistIndex: i, displayIndex: displayIdx++ });
+          indexToRow.set(i, rows.length - 1);
+        }
+      }
+    } else {
+      const n = playlist.length;
+      let prevAlbum: string | null = null;
+      let headerRow: VirtualRow | null = null;
+      for (let i = 0; i < n; i++) {
+        const track = playlist[i];
+        idToIndex.set(track.id, i);
+        const album = track.album || t('unknownAlbum');
+        if (album !== prevAlbum) {
+          headerRow = { kind: 'header', key: `h-${album}`, album, count: 1 };
+          rows.push(headerRow);
+          prevAlbum = album;
+        } else if (headerRow && headerRow.kind === 'header') {
+          headerRow.count++;
+        }
+        rows.push({ kind: 'track', key: track.id, track, playlistIndex: i, displayIndex: i });
+        indexToRow.set(i, rows.length - 1);
+      }
+    }
+
+    const total = rows.length;
+    const offsets = new Float64Array(total);
+    const heights = new Float64Array(total);
+    let cumulative = 0;
+    for (let i = 0; i < total; i++) {
+      offsets[i] = cumulative;
+      heights[i] = rows[i].kind === 'header' ? HEADER_ROW_H : TRACK_ROW_H;
+      cumulative += heights[i];
+    }
+
+    return {
+      rows,
+      offsets,
+      heights,
+      totalHeight: cumulative,
+      indexToRow,
+      idToIndex,
+      searchCount: isSearching ? total : playlist.length,
+    };
+  }, [playlist, searchQuery, isSearching, t]);
+
+  const layoutRef = useRef<VirtualLayout>(EMPTY_LAYOUT);
+  useEffect(() => { layoutRef.current = virtual; }, [virtual]);
+
+  const visibleRangeRef = useRef({ start: 0, end: 0 });
+  const [visibleRange, setVisibleRange] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const scrollRafRef = useRef<number | null>(null);
+
+  const updateVisibleRange = useCallback(() => {
+    const container = playlistScrollRef.current;
+    const layout = layoutRef.current;
+    if (!container || layout.rows.length === 0) {
+      setVisibleRange(prev => (prev.start === 0 && prev.end === 0 ? prev : { start: 0, end: 0 }));
+      return;
+    }
+    const scrollTop = container.scrollTop;
+    const viewportH = container.clientHeight || 0;
+    const { offsets, heights } = layout;
+    const n = layout.rows.length;
+    let lo = 0, hi = n - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (offsets[mid] + heights[mid] <= scrollTop) lo = mid + 1;
+      else hi = mid;
+    }
+    let start = Math.max(0, lo - LIST_OVERSCAN);
+    let end = start;
+    while (end < n && offsets[end] < scrollTop + viewportH) end++;
+    end = Math.min(n, end + LIST_OVERSCAN);
+    if (start !== visibleRangeRef.current.start || end !== visibleRangeRef.current.end) {
+      visibleRangeRef.current = { start, end };
+      setVisibleRange(visibleRangeRef.current);
+    }
+  }, []);
+
+  const handleListScroll = useCallback(() => {
+    if (scrollRafRef.current) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      updateVisibleRange();
     });
-    return groups;
-  }, [playlist, searchQuery, t]);
+  }, [updateVisibleRange]);
 
-  const reorderEnabled = !isSelectionMode && !searchQuery.trim();
+  useEffect(() => {
+    const container = playlistScrollRef.current;
+    if (!container) return;
+    updateVisibleRange();
+    const ro = new ResizeObserver(() => updateVisibleRange());
+    ro.observe(container);
+    return () => {
+      ro.disconnect();
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = null;
+    };
+  }, [updateVisibleRange, virtual]);
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+  const reorderEnabled = !isSelectionMode && !isSearching;
+
+  const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, index: number) => {
     e.dataTransfer.setData('text/plain', String(index));
     e.dataTransfer.effectAllowed = 'move';
     setDragFrom(index);
     setDropPos(null);
-  };
+  }, []);
 
-  const handleDragOverRow = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+  const handleDragOverRow = useCallback((e: React.DragEvent<HTMLDivElement>, index: number) => {
     if (dragFrom === null) return;
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const pos = e.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom';
     setDropPos(prev => (prev && prev.index === index && prev.pos === pos ? prev : { index, pos }));
-  };
+  }, [dragFrom]);
 
-  const handleDropRow = (index: number) => {
+  const handleDropRow = useCallback((index: number) => {
     if (dragFrom === null) return;
     setPlaylist(prev => {
       const next = [...prev];
@@ -707,42 +839,48 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     });
     setDragFrom(null);
     setDropPos(null);
-  };
+  }, [dragFrom]);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     setDragFrom(null);
     setDropPos(null);
-  };
+  }, []);
 
   const scrollToCurrentTrack = useCallback(() => {
     const container = playlistScrollRef.current;
+    const layout = layoutRef.current;
     if (!container || currentTrackIndex === -1) return;
-    const el = container.querySelector<HTMLElement>(`[data-track-id="${playlist[currentTrackIndex]?.id}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [currentTrackIndex, playlist]);
+    const rowIdx = layout.indexToRow.get(currentTrackIndex);
+    if (rowIdx === undefined) return;
+    container.scrollTo({ top: LIST_TOP_PAD + layout.offsets[rowIdx], behavior: 'smooth' });
+  }, [currentTrackIndex]);
 
   useEffect(() => {
     const container = playlistScrollRef.current;
+    const layout = layoutRef.current;
     if (!container || currentTrackIndex === -1) return;
-    const el = container.querySelector<HTMLElement>(`[data-track-id="${playlist[currentTrackIndex]?.id}"]`);
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [currentTrackIndex, playlist]);
+    const rowIdx = layout.indexToRow.get(currentTrackIndex);
+    if (rowIdx === undefined) return;
+    container.scrollTop = LIST_TOP_PAD + layout.offsets[rowIdx];
+    updateVisibleRange();
+  }, [currentTrackIndex, updateVisibleRange, virtual]);
 
   useEffect(() => {
     const container = playlistScrollRef.current;
     if (!container) return;
     const onScroll = () => {
       if (currentTrackIndex === -1) { setShowJump(false); return; }
-      const el = container.querySelector<HTMLElement>(`[data-track-id="${playlist[currentTrackIndex]?.id}"]`);
-      if (!el) { setShowJump(false); return; }
-      const cr = container.getBoundingClientRect();
-      const er = el.getBoundingClientRect();
-      setShowJump(er.top < cr.top || er.bottom > cr.bottom);
+      const layout = layoutRef.current;
+      const rowIdx = layout.indexToRow.get(currentTrackIndex);
+      if (rowIdx === undefined) { setShowJump(false); return; }
+      const top = LIST_TOP_PAD + layout.offsets[rowIdx];
+      const bottom = top + layout.heights[rowIdx];
+      setShowJump(top < container.scrollTop || bottom > container.scrollTop + container.clientHeight);
     };
     onScroll();
     container.addEventListener('scroll', onScroll, { passive: true });
     return () => container.removeEventListener('scroll', onScroll);
-  }, [currentTrackIndex, playlist]);
+  }, [currentTrackIndex, virtual]);
 
   useEffect(() => {
     if (!isSearchOpen) return;
@@ -775,12 +913,40 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setPlaylist(prev => prev.map(t => t.id === id ? { ...t, title: newTitle } : t));
   };
 
-  const formatTime = (seconds: number) => {
+  const formatTime = useCallback((seconds: number) => {
     if (!seconds || isNaN(seconds)) return "0:00";
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  }, []);
+
+  const handlePlayTrack = useCallback((track: MusicTrack) => {
+    setOnlineSession(null);
+    const index = layoutRef.current.idToIndex.get(track.id);
+    if (index === undefined) return;
+    setCurrentTrackIndex(index);
+    setIsPlaying(true);
+  }, []);
+
+  const handleDeleteTrack = useCallback((id: string) => {
+    setTrackToDelete(id);
+    setTracksToDeleteCount(1);
+    setDeleteConfirmOpen(true);
+  }, []);
+
+  const handleDetailsTrack = useCallback((track: MusicTrack) => {
+    setDetailsTrack(track);
+    setIsMusicDetailsOpen(true);
+  }, []);
+
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedTrackIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }, []);
 
   const handleSwitchToMini = () => {
       if (window.electronAPI) {
@@ -831,6 +997,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setDeleteConfirmOpen(false);
       setIsSelectionMode(false);
   };
+
+  const currentTrackId = playlist[currentTrackIndex]?.id;
+  const virtualRowCount = virtual.rows.length;
+  const listTopGap = virtualRowCount > 0 && visibleRange.start > 0 ? virtual.offsets[visibleRange.start] : 0;
+  const lastVisibleIdx = virtualRowCount > 0 ? Math.min(visibleRange.end, virtualRowCount) - 1 : -1;
+  const listBottomGap = lastVisibleIdx >= 0
+    ? Math.max(0, virtual.totalHeight - (virtual.offsets[lastVisibleIdx] + virtual.heights[lastVisibleIdx]))
+    : 0;
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-black via-zinc-950 to-black p-4 md:p-6 relative overflow-hidden">
@@ -951,7 +1125,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 <div className="flex flex-wrap gap-3 justify-between items-center">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-pink-500/10 rounded-lg text-pink-500"><ListMusic size={24} /></div>
-                        <div><h3 className="text-lg font-bold text-white font-persian">{t('playlist')}</h3><p className="text-xs text-gray-500 font-mono">{filteredTracks.length} / {playlist.length} TRACKS</p></div>
+                        <div><h3 className="text-lg font-bold text-white font-persian">{t('playlist')}</h3><p className="text-xs text-gray-500 font-mono">{virtual.searchCount} / {playlist.length} TRACKS</p></div>
                     </div>
                     <div className="flex items-center gap-2">
                         {isSelectionMode ? (
@@ -986,27 +1160,29 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                 <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 end-2 my-auto p-1 text-gray-500 hover:text-white transition-colors" title={t('playlistClearSearch')}><XCircle size={16} /></button>
                             )}
                         </div>
-                        <span className="text-xs font-mono text-gray-500 shrink-0">{filteredTracks.length}/{playlist.length}</span>
+                        <span className="text-xs font-mono text-gray-500 shrink-0">{virtual.searchCount}/{playlist.length}</span>
                     </div>
                 )}
             </div>
 
-            <div ref={playlistScrollRef} className="flex-1 overflow-y-auto p-4 neon-scrollbar">
+            <div ref={playlistScrollRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto neon-scrollbar" style={{ overflowAnchor: 'none' }}>
                 {isAdding ? (
-                    <div className="flex flex-col gap-2">
-                        {[0, 1, 2, 3, 4, 5].map((i) => (
-                            <div key={i} className="flex items-center gap-3 h-16 px-3 rounded-2xl bg-zinc-900/40 border border-white/5 relative overflow-hidden">
-                                <div className="w-12 h-12 rounded-xl bg-zinc-800/70 shrink-0" />
-                                <div className="flex-1 space-y-2">
-                                    <div className="h-3 w-1/3 bg-zinc-800/70 rounded" />
-                                    <div className="h-2 w-1/4 bg-zinc-800/70 rounded" />
+                    <div className="p-4">
+                        <div className="flex flex-col gap-2">
+                            {[0, 1, 2, 3, 4, 5].map((i) => (
+                                <div key={i} className="flex items-center gap-3 h-16 px-3 rounded-2xl bg-zinc-900/40 border border-white/5 relative overflow-hidden">
+                                    <div className="w-12 h-12 rounded-xl bg-zinc-800/70 shrink-0" />
+                                    <div className="flex-1 space-y-2">
+                                        <div className="h-3 w-1/3 bg-zinc-800/70 rounded" />
+                                        <div className="h-2 w-1/4 bg-zinc-800/70 rounded" />
+                                    </div>
+                                    <div className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
                                 </div>
-                                <div className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
                 ) : playlist.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4 animate-fade-in">
+                    <div className="h-full p-4 flex flex-col items-center justify-center text-gray-500 gap-4 animate-fade-in">
                         <div className="relative w-28 h-28">
                             <div className="absolute inset-0 rounded-full border-2 border-dashed border-red-500/40 animate-[ring-spin_14s_linear_infinite]" />
                             <div className="absolute inset-4 rounded-full bg-zinc-900/80 backdrop-blur-md border border-white/10 flex items-center justify-center">
@@ -1016,77 +1192,50 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         <p className="font-bold text-white font-persian">{t('noSongs')}</p>
                         <p className="text-sm text-gray-500 font-persian">{t('addSongsDesc')}</p>
                     </div>
-                ) : searchQuery && filteredTracks.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-500 animate-fade-in">
+                ) : isSearching && virtual.rows.length === 0 ? (
+                    <div className="h-full p-4 flex flex-col items-center justify-center gap-3 text-gray-500 animate-fade-in">
                         <XCircle size={48} className="text-zinc-700" />
                         <p className="text-sm font-bold text-white">{t('playlistNoResults')}</p>
                     </div>
-                ) : groupedTracks ? (
-                    <div key="grouped" className="flex flex-col gap-1">
-                        {groupedTracks.map(group => (
-                            <div key={group.album}>
-                                <div className="sticky top-0 z-20 flex items-center gap-2 px-2 py-1.5 bg-zinc-950/90 backdrop-blur-md">
-                                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest truncate">{group.album}</span>
-                                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold text-pink-400 bg-pink-500/10 border border-pink-500/20 shrink-0">{group.tracks.length}</span>
-                                </div>
-                                <div className="flex flex-col gap-2 mb-2">
-                                    {group.tracks.map(({ track, index }) => (
-                                        <PlaylistRow
-                                            key={track.id}
-                                            track={track}
-                                            index={index}
-                                            isCurrent={track.id === playlist[currentTrackIndex]?.id}
-                                            isPlaying={isPlaying}
-                                            isSelected={selectedTrackIds.has(track.id)}
-                                            selectionMode={isSelectionMode}
-                                            reorderEnabled={reorderEnabled}
-                                            moreOpen={moreMenuId === track.id}
-                                            dropPos={dropPos && dropPos.index === index ? dropPos.pos : null}
-                                            staggerDelay={Math.min(index * 24, 400)}
-                                            formatTime={formatTime}
-                                            onPlay={(tr) => { setOnlineSession(null); const i = playlist.findIndex(p => p.id === tr.id); setCurrentTrackIndex(i); setIsPlaying(true); }}
-                                            onDelete={(id) => { setTrackToDelete(id); setTracksToDeleteCount(1); setDeleteConfirmOpen(true); }}
-                                            onDetails={(tr) => { setDetailsTrack(tr); setIsMusicDetailsOpen(true); }}
-                                            onMoreToggle={setMoreMenuId}
-                                            onToggleSelect={(id) => setSelectedTrackIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
-                                            onDragStart={handleDragStart}
-                                            onDragOverRow={handleDragOverRow}
-                                            onDropRow={handleDropRow}
-                                            onDragEnd={handleDragEnd}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
                 ) : (
-                    <div key={searchQuery} className="flex flex-col gap-2">
-                        {filteredTracks.map((track, idx) => (
-                            <div key={track.id} className="cv-row mb-2">
-                                <PlaylistRow
-                                    track={track}
-                                    index={idx}
-                                    isCurrent={track.id === playlist[currentTrackIndex]?.id}
-                                    isPlaying={isPlaying}
-                                    isSelected={selectedTrackIds.has(track.id)}
-                                    selectionMode={isSelectionMode}
-                                    reorderEnabled={false}
-                                    moreOpen={moreMenuId === track.id}
-                                    dropPos={null}
-                                    staggerDelay={Math.min(idx * 24, 400)}
-                                    formatTime={formatTime}
-                                    onPlay={(tr) => { setOnlineSession(null); const i = playlist.findIndex(p => p.id === tr.id); setCurrentTrackIndex(i); setIsPlaying(true); }}
-                                    onDelete={(id) => { setTrackToDelete(id); setTracksToDeleteCount(1); setDeleteConfirmOpen(true); }}
-                                    onDetails={(tr) => { setDetailsTrack(tr); setIsMusicDetailsOpen(true); }}
-                                    onMoreToggle={setMoreMenuId}
-                                    onToggleSelect={(id) => setSelectedTrackIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
-                                    onDragStart={handleDragStart}
-                                    onDragOverRow={handleDragOverRow}
-                                    onDropRow={handleDropRow}
-                                    onDragEnd={handleDragEnd}
-                                />
-                            </div>
-                        ))}
+                    <div className="px-4" style={{ paddingTop: 16, paddingBottom: 12 }}>
+                        <div style={{ height: listTopGap }} />
+                        {virtual.rows.slice(visibleRange.start, visibleRange.end).map((row) =>
+                            row.kind === 'header' ? (
+                                <div key={row.key} style={{ height: HEADER_ROW_H }} className="sticky top-0 z-20 flex items-center gap-2 px-2 border-b border-white/5 bg-zinc-950/95">
+                                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest truncate">{row.album}</span>
+                                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold text-pink-400 bg-pink-500/10 border border-pink-500/20 shrink-0">{row.count}</span>
+                                </div>
+                            ) : (
+                                <div key={row.key} className="mb-2">
+                                    <PlaylistRow
+                                        track={row.track}
+                                        index={row.playlistIndex}
+                                        displayIndex={row.displayIndex}
+                                        virtualized
+                                        isCurrent={row.track.id === currentTrackId}
+                                        isPlaying={isPlaying}
+                                        isSelected={selectedTrackIds.has(row.track.id)}
+                                        selectionMode={isSelectionMode}
+                                        reorderEnabled={reorderEnabled && !isSearching}
+                                        moreOpen={moreMenuId === row.track.id}
+                                        dropPos={dropPos && dropPos.index === row.playlistIndex ? dropPos.pos : null}
+                                        staggerDelay={0}
+                                        formatTime={formatTime}
+                                        onPlay={handlePlayTrack}
+                                        onDelete={handleDeleteTrack}
+                                        onDetails={handleDetailsTrack}
+                                        onMoreToggle={setMoreMenuId}
+                                        onToggleSelect={handleToggleSelect}
+                                        onDragStart={handleDragStart}
+                                        onDragOverRow={handleDragOverRow}
+                                        onDropRow={handleDropRow}
+                                        onDragEnd={handleDragEnd}
+                                    />
+                                </div>
+                            )
+                        )}
+                        <div style={{ height: listBottomGap }} />
                     </div>
                 )}
             </div>
