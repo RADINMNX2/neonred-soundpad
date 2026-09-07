@@ -16,6 +16,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.5.0",
+    date: "2026-09-08",
+    features: {
+      added: [
+        "One Button for Your Whole Library: The scattered 'Add Folder / Add Files / Manage Folders' buttons are now a single modern Library button that opens a beautiful glass modal — pick a folder, drop in files, or manage your scanned folders all in one place.",
+        "Visualizer — Everywhere: Your Visualizer Studio settings (style, colors, sensitivity) now apply instantly to the Mini Player too, and stay live the moment you tweak them — no more separate look in the compact window.",
+        "Lightning Update Engine: The download & update modal got a full modern redesign with a live progress ring, speed and remaining-time stats. The updater now pulls differential updates (much smaller downloads via blockmap), auto-installs on quit, reruns the app after installing, and never reaches for pre-release builds.",
+        "Real Track Times in the Playlist: Every song now shows its true duration — the app reads it straight from the audio file header in the background, and learns it instantly the moment a track plays. No more rows stuck at 0:00.",
+        "Smarter Playlist Grouping: The playlist now groups tracks by their real album, falling back to grouping by artist whenever album info is missing — no more one giant 'Unknown Album' bucket sorted by file name.",
+      ],
+      fixed: [
+        "Playlist scrolling is now buttery smooth: the animated equalizer bars and the breathing glow that re-painted the playing row at 60fps are gone, so scrolling a huge list no longer drops frames.",
+        "Fewer processes in Task Manager: the extra hidden windows (Mini Player / tray popup) are no longer created at startup — they're built lazily only when you actually use them.",
+        "Playlist rows no longer show a fake 0:00 — unknown durations display a neutral --:-- until the real time is known.",
+      ]
+    },
+    featuresFa: {
+      added: [
+        "یه دکمه برای کل کتابخونت: دکمه‌های پخش‌پاش «افزودن پوشه / افزودن فایل / مدیریت پوشه‌ها» حالا یه دکمهٔ شیک و تکی شدن که یه مودال مدرن شیشه‌ای باز می‌کنه — پوشه اضافه کن، فایل بریز یا پوشه‌های اسکن‌شده رو مدیریت کن، همه‌توی یک‌جا.",
+        "ویژوالایزر همه‌جا: تنظیمات ویژوالایزر استودیو (استایل، رنگ، حساسیت) حالا رو مینی‌پلیر هم اعمال می‌شن و لحظه‌ای که تغییرشون بدی زنده سینک می‌شن — دیگه توی پنجرهٔ کوچیک ظاهر جدایی نداره.",
+        "موتور آپدیت رعدآسا: مودال دانلود و آپدیت کاملاً بازطراحی شد؛ حلقهٔ پیشرفت زنده، سرعت و زمان باقی‌مونده. آپدیت دیگه به‌صورت دیفرانشیال (دانلود خیلی سبک‌تر با blockmap) میاد، موقع بستن برنامه خودش نصاب می‌شه و بعدش خودکار دوباره اجرا می‌شه و هیچ‌وقت سراغ نسخه‌های پر-ریلیز نمی‌ره.",
+        "تایم واقعی توی پلی‌لیست: هر آهنگ حالا تایم واقعی خودش رو نشون می‌ده — برنامه توی پس‌زمینه مستقیم از هدر فایل می‌خونش و همون لحظه‌ای که آهنگ پخش می‌شه هم یادش می‌گیره. دیگه همه‌جا 0:00 نیست.",
+        "دسته‌بندی هوشمند پلی‌لیست: پلی‌لیست حالا بر اساس آلبوم واقعی گروه‌بندی می‌شه و هر جا آلبومی نبود، به‌جاش بر اساس خواننده — دیگه خبری از یه سطل گندهٔ «آلبوم نامعلوم» که با اسم فایل مرتب شده نیست.",
+      ],
+      fixed: [
+        "اسکرول پلی‌لیست حالا کاملاً نرمه: اکولایزر متحرک و اون هالهٔ تنفسی که آهنگ در حال پخش رو با ۶۰ فریم بر ثانیه بازترسیم می‌کرد حذف شدن؛ دیگه موقع اسکرول لیست گنده فریم نمی‌پره.",
+        "پروسه‌های توی Task Manager کمتر شدن: پنجره‌های مخفی اضافه (مینی‌پلیر / پنجرهٔ ترِی) دیگه همون اول اجرا ساخته نمی‌شن — فقط وقتی واقعاً استفاده‌شون کنی ساخته می‌شن.",
+        "ردیف‌های پلی‌لیست دیگه 0:00 جعلی نشون نمی‌دن — وقتی تایم معلوم نیست یه --:-- خنثی میاد تا تایم واقعی معلوم شه.",
+      ]
+    }
+  },
+  {
     version: "2.4.0",
     date: "2026-09-08",
     features: {

@@ -1,10 +1,20 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { Maximize2, X, Play, Pause, SkipForward, SkipBack, Music, FileText } from 'lucide-react';
-import { MiniPlayerState } from '../types';
+import { MiniPlayerState, VisualizerConfig } from '../types';
 import RealTimeVisualizer from '../components/RealTimeVisualizer';
 import LyricsOverlay from '../components/LyricsOverlay';
 import { getDominantColor } from '../utils/audioHelpers';
+
+const DEFAULT_VIS_CONFIG: VisualizerConfig = {
+  isEnabled: true,
+  height: 0.8,
+  sensitivity: 1.2,
+  barCount: 20,
+  barGap: 2,
+  colorMode: 'manual',
+  manualColor: '#ef4444',
+};
 
 const MiniPlayer: React.FC = () => {
   const [musicState, setMusicState] = useState<MiniPlayerState>({ track: null, isPlaying: false, currentTime: 0, duration: 0 });
@@ -15,6 +25,27 @@ const MiniPlayer: React.FC = () => {
   const visDataRef = useRef<Uint8Array | null>(null);
   const [lyricsOpen, setLyricsOpen] = useState(false);
   const [lyricsEverOpen, setLyricsEverOpen] = useState(false);
+
+  // Load the SAME visualizer settings the main player uses (visualizer_studio_config)
+  const [visConfig, setVisConfig] = useState<VisualizerConfig>(() => {
+    try {
+      const saved = localStorage.getItem('visualizer_studio_config');
+      if (saved) return { ...DEFAULT_VIS_CONFIG, ...JSON.parse(saved) };
+    } catch (e) { /* fall through to defaults */ }
+    return { ...DEFAULT_VIS_CONFIG };
+  });
+
+  // Live-sync settings while the mini player is open (storage fires in other windows of the same origin)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== 'visualizer_studio_config') return;
+      try {
+        if (e.newValue) setVisConfig({ ...DEFAULT_VIS_CONFIG, ...JSON.parse(e.newValue) });
+      } catch (err) { /* ignore malformed */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
   
   // Use ref for dragging state to avoid effect re-runs
   const isDraggingRef = useRef(false);
@@ -205,23 +236,17 @@ const MiniPlayer: React.FC = () => {
                     )}
 
                     {/* Visualizer Overlay */}
-                    <div className="absolute bottom-0 left-0 right-0 h-1/2 flex items-end justify-center px-4 pb-0 opacity-90 pointer-events-none mix-blend-screen">
-                        <RealTimeVisualizer 
-                            analyser={null} 
-                            isPlaying={isPlaying} 
-                            color={adaptiveColor} 
-                            externalDataRef={visDataRef} // Use synced data from main window via ref (no 60fps re-renders)
-                            config={{
-                                isEnabled: true,
-                                height: 0.8,
-                                sensitivity: 1.2,
-                                barCount: 20, 
-                                barGap: 2,
-                                colorMode: 'manual',
-                                manualColor: adaptiveColor
-                            }}
-                        />
-                    </div>
+                    {visConfig.isEnabled && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1/2 flex items-end justify-center px-4 pb-0 opacity-90 pointer-events-none mix-blend-screen">
+                            <RealTimeVisualizer 
+                                analyser={null} 
+                                isPlaying={isPlaying} 
+                                color={visConfig.colorMode === 'manual' ? visConfig.manualColor : adaptiveColor} 
+                                externalDataRef={visDataRef} // Use synced data from main window via ref (no 60fps re-renders)
+                                config={visConfig}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Meta Data */}

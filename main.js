@@ -31,6 +31,13 @@ let tray = null;
 let isQuitting = false;
 let ipcRegistered = false;
 
+// --- UPDATER ENGINE TUNING (fast + low-bandwidth) ---
+autoUpdater.autoDownload = false; // ask the user first
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoRunAppAfterInstall = true; // relaunch instantly after silent install
+autoUpdater.allowPrerelease = false;       // stable channel only (smaller, verified downloads)
+autoUpdater.fullChangelog = true;
+
 // Store music state to send to windows
 let currentMusicState = { track: null, isPlaying: false, currentTime: 0, duration: 0 };
 
@@ -251,10 +258,11 @@ function createTray() {
 
   // Right Click: Custom Menu
   tray.on('right-click', () => {
+      if (!trayWindow || trayWindow.isDestroyed()) createTrayWindow();
       toggleTrayWindow();
   });
 
-  createTrayWindow();
+  // Tray popup window is created lazily on first right-click to avoid an idle renderer.
 }
 
 function createWindow() {
@@ -291,6 +299,7 @@ function createWindow() {
       // LOGIC: If music is playing, switch to Mini Player. Else, just hide.
       if (currentMusicState.isPlaying) {
           mainWindow.hide();
+          if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) createMiniPlayerWindow();
           if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
               const display = screen.getPrimaryDisplay();
               const { width, height } = display.workAreaSize;
@@ -370,6 +379,7 @@ function registerIpcHandlers() {
   // --- Music Sync IPC ---
   ipcMain.on('switch-to-mini', () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+      if (!miniPlayerWindow || miniPlayerWindow.isDestroyed()) createMiniPlayerWindow();
       if (miniPlayerWindow && !miniPlayerWindow.isDestroyed()) {
           // Position at bottom right of primary display
           const display = screen.getPrimaryDisplay();
@@ -443,7 +453,8 @@ function registerIpcHandlers() {
 
   ipcMain.on('install-update', () => {
      isQuitting = true;
-     autoUpdater.quitAndInstall();
+     // Non-silent (NSIS shows a brief spinner) + force relaunch once done → feels instant.
+     autoUpdater.quitAndInstall(false, true);
   });
 }
 
@@ -1318,10 +1329,10 @@ app.on('before-quit', () => {
 });
 
 app.whenReady().then(() => {
+  if (!gotTheLock) return; // A second instance already owns the app — never create windows here.
   setupAutoUpdater();
   registerIpcHandlers();
   createWindow();
-  createMiniPlayerWindow(); 
   createTray();
 
   app.on('activate', () => {

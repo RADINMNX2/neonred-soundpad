@@ -117,11 +117,51 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-export const parseAudioMetadata = (file: Blob): Promise<{ title?: string, artist?: string, album?: string, cover?: string, lyrics?: string }> => {
+// Probe audio duration cheaply by loading only the header (preload=metadata).
+export const probeAudioDuration = (file: Blob, timeoutMs = 5000): Promise<number | undefined> => {
   return new Promise((resolve) => {
+    try {
+      const url = URL.createObjectURL(file);
+      const audio = new Audio();
+      let settled = false;
+      const finish = (value: number | undefined) => {
+        if (settled) return;
+        settled = true;
+        URL.revokeObjectURL(url);
+        audio.removeAttribute('src');
+        audio.load();
+        resolve(value);
+      };
+      audio.preload = 'metadata';
+      audio.addEventListener('loadedmetadata', () => {
+        const d = audio.duration;
+        finish(Number.isFinite(d) && d > 0 ? d : undefined);
+      });
+      audio.addEventListener('error', () => finish(undefined));
+      setTimeout(() => finish(undefined), timeoutMs);
+      audio.src = url;
+    } catch {
+      resolve(undefined);
+    }
+  });
+};
+
+export const parseAudioMetadata = (file: Blob): Promise<{ title?: string, artist?: string, album?: string, cover?: string, lyrics?: string, duration?: number }> => {
+  return new Promise((resolve) => {
+    let meta: { title?: string, artist?: string, album?: string, cover?: string, lyrics?: string } = {};
+    let duration: number | undefined;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve({ ...meta, duration });
+    };
+
+    probeAudioDuration(file).then(d => { duration = d; finish(); }).catch(() => finish());
+
     if (!window.jsmediatags) {
-        resolve({});
-        return;
+      finish();
+      return;
     }
 
     window.jsmediatags.read(file, {
@@ -140,10 +180,11 @@ export const parseAudioMetadata = (file: Blob): Promise<{ title?: string, artist
                     console.error("Error parsing cover", e);
                 }
             }
-            resolve({ title, artist, album, cover, lyrics: lyrics && typeof lyrics === 'string' ? lyrics : undefined });
+            meta = { title, artist, album, cover, lyrics: lyrics && typeof lyrics === 'string' ? lyrics : undefined };
+            finish();
         },
         onError: () => {
-            resolve({});
+            finish();
         }
     });
   });

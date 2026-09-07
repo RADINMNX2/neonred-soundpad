@@ -8,8 +8,8 @@ export const EqualizerBars: React.FC<{ paused?: boolean }> = ({ paused }) => (
     {[0, 1, 2].map((i) => (
       <span
         key={i}
-        className={`w-[3px] h-full rounded-full bg-pink-500 shadow-[0_0_6px_rgba(236,72,153,0.8)] eq-bar ${paused ? 'eq-bar-paused' : ''}`}
-        style={{ animationDelay: `${i * 150}ms` }}
+        className="w-[3px] rounded-full bg-pink-500 shadow-[0_0_6px_rgba(236,72,153,0.8)]"
+        style={{ height: `${[9, 12, 7][i]}px` }}
       />
     ))}
   </div>
@@ -88,9 +88,6 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
       {isCurrent && (
         <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-pink-600/10 to-transparent pointer-events-none" />
       )}
-      {isCurrent && (
-        <div className="absolute inset-0 rounded-2xl pointer-events-none animate-glow-breathe bg-[radial-gradient(circle_at_30%_50%,rgba(236,72,153,0.12),transparent_70%)]" />
-      )}
 
       {reorderEnabled && (
         <div className="w-3 shrink-0 flex items-center justify-center text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-grab">
@@ -120,7 +117,7 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
         )}
         {isCurrent && isPlaying && (
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
-            <EqualizerBars />
+            <span className="w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_10px_rgba(236,72,153,1)]" />
           </div>
         )}
       </div>
@@ -135,7 +132,7 @@ const PlaylistRow: React.FC<PlaylistRowProps> = memo(function PlaylistRow({
         </p>
       </div>
 
-      <span className="text-xs font-mono text-gray-500 shrink-0 hidden sm:inline" dir="ltr">{formatTime(track.duration)}</span>
+      <span className="text-xs font-mono text-gray-500 shrink-0 hidden sm:inline" dir="ltr">{track.duration > 0 ? formatTime(track.duration) : '--:--'}</span>
 
       <div className="flex items-center gap-1 pr-1 z-10 shrink-0">
         <div className="relative">

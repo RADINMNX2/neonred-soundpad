@@ -237,6 +237,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             title: meta.title || t.title,
             artist: meta.artist || t.artist,
             album: meta.album || t.album,
+            duration: meta.duration || t.duration || 0,
           };
         } catch (e) { /* unreadable file — keep filename-based title */ }
       }
@@ -557,7 +558,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               const newTrack: MusicTrack = {
                   id: tempId, title, artist, album, 
                   url: `file://${filePath}`, path: filePath, 
-                  duration: 0, cover
+                  duration: meta.duration || 0, cover
               };
               
               setPlaylist(prev => [newTrack, ...prev]);
@@ -811,7 +812,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             }
         }
     };
-    const updateDuration = () => setDuration(audio.duration);
+    const updateDuration = () => {
+        const d = audio.duration;
+        setDuration(d);
+        const idx = currentTrackIndexRef.current;
+        if (Number.isFinite(d) && d > 0 && idx !== -1) {
+            const dur = Math.round(d);
+            setPlaylist(prev => {
+                const tr = prev[idx];
+                if (!tr) return prev;
+                if (tr.duration === dur || (tr.duration || 0) > 0) return prev;
+                const next = [...prev];
+                next[idx] = { ...tr, duration: dur };
+                return next;
+            });
+        }
+    };
     
     const onEnded = () => handleNextRef.current();
 
@@ -931,7 +947,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (meta.cover) cover = meta.cover;
         if (!cover) cover = await extractAlbumArt(file);
         
-        newTracks.push({ id: crypto.randomUUID(), title, artist, album, url, path: originalPath, duration: 0, cover });
+        newTracks.push({ id: crypto.randomUUID(), title, artist, album, url, path: originalPath, duration: meta.duration || 0, cover });
     }
     setPlaylist(prev => [...prev, ...newTracks]);
     setIsAdding(false);
@@ -962,16 +978,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       }
     } else {
       const n = playlist.length;
-      let prevAlbum: string | null = null;
+      const UNKNOWN_ALBUM = t('unknownAlbum');
+      let prevKey: string | null = null;
       let headerRow: VirtualRow | null = null;
       for (let i = 0; i < n; i++) {
         const track = playlist[i];
         idToIndex.set(track.id, i);
-        const album = track.album || t('unknownAlbum');
-        if (album !== prevAlbum) {
-          headerRow = { kind: 'header', key: `h-${album}`, album, count: 1 };
+        const album = track.album;
+        const hasAlbum = !!album && album !== 'Unknown Album' && album !== UNKNOWN_ALBUM;
+        const groupKey = hasAlbum ? album : (track.artist || t('unknownArtist'));
+        if (groupKey !== prevKey) {
+          headerRow = { kind: 'header', key: `h-${groupKey}`, album: groupKey, count: 1 };
           rows.push(headerRow);
-          prevAlbum = album;
+          prevKey = groupKey;
         } else if (headerRow && headerRow.kind === 'header') {
           headerRow.count++;
         }
@@ -1387,11 +1406,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         )}
                         <div className="w-px h-6 bg-white/10 mx-1"></div>
                         <button onClick={() => setOnlineOpen(true)} className="px-3 py-2 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-pink-500/40 shadow-lg shadow-pink-900/20 hover:shadow-[0_0_20px_rgba(236,72,153,0.35)] active:scale-95"><Globe size={16} /><span>{t('onlineBtn')}</span></button>
-                        <div className="flex items-center gap-2">
-                            <button onClick={handleAddFolder} disabled={isScanning} className="cursor-pointer px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-white/5 hover:border-white/20 disabled:opacity-50 active:scale-95" title={t('addFolder')}><FolderPlus size={16} /><span>{t('addFolder')}</span></button>
-                            <label className="cursor-pointer px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-white/5 hover:border-white/20"><Plus size={16} /><span>{t('addSongs')}</span><input type="file" multiple accept="audio/*" className="hidden" onChange={(e) => handleFileAdd(e.target.files)} /></label>
-                            <button onClick={() => setIsLibraryOpen(prev => !prev)} className={`p-2 rounded-xl transition-all border ${isLibraryOpen ? 'bg-pink-500/15 text-pink-400 border-pink-500/30' : 'bg-zinc-800 hover:bg-zinc-700 text-gray-400 hover:text-white border-white/5'}`} title={t('libraryManage')}><Library size={16} /></button>
-                        </div>
+                        <button onClick={() => setIsLibraryOpen(true)} className={`px-3 py-2 flex items-center gap-2 rounded-xl text-xs font-bold transition-all border active:scale-95 cursor-pointer ${isScanning ? 'bg-amber-500/15 text-amber-300 border-amber-500/30 animate-pulse' : 'bg-zinc-800 hover:bg-zinc-700 text-white border-white/5 hover:border-white/20'} `} title={t('libraryManage')}><Folder size={16} /><span>{t('libraryBtn')}</span>{isScanning && <Loader2 size={12} className="animate-spin" />}</button>
                     </div>
                 </div>
                 {isSearchOpen && (
@@ -1416,46 +1431,79 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             </div>
 
             {isLibraryOpen && (
-                <>
-                    <div className="absolute inset-0 z-30" onClick={() => setIsLibraryOpen(false)}></div>
-                    <div className="absolute top-16 right-3 z-40 w-80 max-w-[calc(100%-1.5rem)] rounded-2xl bg-zinc-950/95 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/60 p-4 space-y-3 animate-slide-up">
-                        <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-white font-persian flex items-center gap-2"><HardDrive size={15} className="text-pink-500" />{t('libraryTitle')}</h4>
-                            <button onClick={() => setIsLibraryOpen(false)} className="p-1 text-gray-500 hover:text-white transition-colors"><X size={15} /></button>
-                        </div>
-                        <p className="text-[11px] text-gray-500 font-persian leading-relaxed">{t('libraryDesc')}</p>
-                        <div className="flex gap-2">
-                            <button onClick={handleAddFolder} className="flex-1 px-3 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95"><FolderPlus size={14} />{t('addFolder')}</button>
-                            <button onClick={() => scanLibraryFolders()} disabled={libraryFolders.length === 0 || isScanning} className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border border-white/5 disabled:opacity-40"><RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />{t('libraryRescan')}</button>
-                        </div>
-                        {isScanning && (
-                            <div className="flex items-center gap-2 text-[11px] text-pink-300">
-                                <Loader2 size={13} className="animate-spin" />{t('libraryScanning')}
-                                <span className="font-mono ml-auto">{libScanCount.toLocaleString()}</span>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-xl animate-fade-in" onClick={() => setIsLibraryOpen(false)}></div>
+                    <div className="relative w-full max-w-md bg-zinc-950/90 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl shadow-black/70 animate-slide-up overflow-hidden">
+                        <div className="absolute -top-24 -right-24 w-56 h-56 bg-pink-600/10 blur-[70px] rounded-full pointer-events-none"></div>
+                        <div className="absolute -bottom-24 -left-24 w-56 h-56 bg-fuchsia-600/10 blur-[70px] rounded-full pointer-events-none"></div>
+                        <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-pink-500 via-fuchsia-400 to-pink-500 bg-[length:200%_100%] animate-gradient-x"></div>
+
+                        <div className="p-6 relative z-10">
+                            <div className="flex items-center justify-between mb-1">
+                                <h3 className="font-black text-white text-lg font-persian flex items-center gap-2">
+                                    <span className="w-9 h-9 rounded-xl bg-pink-500/15 border border-pink-500/30 flex items-center justify-center">
+                                        <HardDrive size={16} className="text-pink-500" />
+                                    </span>
+                                    {t('libraryTitle')}
+                                </h3>
+                                <button onClick={() => setIsLibraryOpen(false)} className="p-1.5 text-gray-500 hover:text-white hover:bg-white/5 rounded-full transition-all"><X size={16} /></button>
                             </div>
-                        )}
-                        {libStatus && !isScanning && (
-                            <p className="text-[11px] text-emerald-300/90 font-persian">{libStatus}</p>
-                        )}
-                        <div className="flex items-start gap-2 text-[10px] font-mono uppercase tracking-widest text-gray-600">
-                            <Disc size={12} className="text-zinc-600 shrink-0 mt-0.5" />
-                            <span className="font-persian normal-case tracking-normal text-gray-500">{t('libraryPlayInPlace')} — {t('libraryPlayInPlaceDesc')}</span>
+                            <p className="text-[11px] text-gray-500 font-persian leading-relaxed mb-5">{t('libraryDesc')}</p>
+
+                            <div className="grid grid-cols-2 gap-3 mb-5">
+                                <button onClick={handleAddFolder} disabled={isScanning} className="group flex flex-col items-start gap-2 p-4 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-pink-500/40 transition-all active:scale-[0.97] disabled:opacity-40 text-left cursor-pointer">
+                                    <span className="w-9 h-9 rounded-xl bg-pink-500/15 border border-pink-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        {isScanning ? <Loader2 size={16} className="text-pink-400 animate-spin" /> : <FolderPlus size={16} className="text-pink-400" />}
+                                    </span>
+                                    <span className="font-bold text-white text-xs font-persian">{t('addFolder')}</span>
+                                    <span className="text-[10px] text-gray-500 font-persian leading-snug">{t('libraryAddFolderDesc')}</span>
+                                </button>
+                                <label className="group flex flex-col items-start gap-2 p-4 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-emerald-500/40 transition-all active:scale-[0.97] cursor-pointer text-left">
+                                    <span className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <Plus size={16} className="text-emerald-400" />
+                                    </span>
+                                    <span className="font-bold text-white text-xs font-persian">{t('addSongs')}</span>
+                                    <span className="text-[10px] text-gray-500 font-persian leading-snug">{t('libraryAddFilesDesc')}</span>
+                                    <input type="file" multiple accept="audio/*" className="hidden" onChange={(e) => { handleFileAdd(e.target.files); setIsLibraryOpen(false); }} />
+                                </label>
+                            </div>
+
+                            <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-bold font-persian text-gray-300 flex items-center gap-1.5"><Library size={13} className="text-gray-500" />{t('libraryScannedDirs')}</h4>
+                                <button onClick={() => scanLibraryFolders()} disabled={libraryFolders.length === 0 || isScanning} className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all border border-white/5 disabled:opacity-40 disabled:cursor-not-allowed"><RefreshCw size={11} className={isScanning ? 'animate-spin' : ''} />{t('libraryRescan')}</button>
+                            </div>
+
+                            {isScanning && (
+                                <div className="flex items-center gap-2 text-[11px] text-pink-300 mb-2">
+                                    <Loader2 size={12} className="animate-spin" />{t('libraryScanning')}
+                                    <span className="font-mono ml-auto">{libScanCount.toLocaleString()}</span>
+                                </div>
+                            )}
+                            {libStatus && !isScanning && (
+                                <p className="text-[11px] text-emerald-300/90 font-persian mb-2">{libStatus}</p>
+                            )}
+
+                            {libraryFolders.length === 0 ? (
+                                <p className="text-xs text-gray-600 font-persian mb-3">{t('libraryEmpty')}</p>
+                            ) : (
+                                <ul className="space-y-1.5 max-h-44 overflow-y-auto custom-scrollbar mb-3">
+                                    {libraryFolders.map(f => (
+                                        <li key={normPath(f)} className="flex items-center gap-2.5 text-[11px] text-gray-300 bg-zinc-900/70 border border-white/5 rounded-xl px-3 py-2">
+                                            <Folder size={13} className="text-zinc-500 shrink-0" />
+                                            <span className="truncate flex-1" dir="ltr">{f}</span>
+                                            <button onClick={() => removeLibraryFolder(f)} className="px-2 py-1 rounded-lg bg-white/5 hover:bg-red-500/15 hover:text-red-400 text-gray-500 text-[10px] font-bold transition-colors">{t('libraryRemove')}</button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+
+                            <div className="flex items-start gap-2 text-[10px] text-gray-600 border-t border-white/5 pt-3">
+                                <Disc size={12} className="text-zinc-600 shrink-0 mt-0.5" />
+                                <span className="font-persian text-gray-500">{t('libraryPlayInPlace')} — {t('libraryPlayInPlaceDesc')}</span>
+                            </div>
                         </div>
-                        {libraryFolders.length === 0 ? (
-                            <p className="text-xs text-gray-600 font-persian">{t('libraryEmpty')}</p>
-                        ) : (
-                            <ul className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
-                                {libraryFolders.map(f => (
-                                    <li key={normPath(f)} className="flex items-center gap-2 text-[11px] text-gray-400 bg-zinc-900/60 border border-white/5 rounded-lg px-2 py-1.5">
-                                        <Folder size={12} className="text-zinc-500 shrink-0" />
-                                        <span className="truncate flex-1" dir="ltr">{f}</span>
-                                        <button onClick={() => removeLibraryFolder(f)} className="p-0.5 text-gray-600 hover:text-red-400 transition-colors" title={t('removeTrack')}><X size={12} /></button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
                     </div>
-                </>
+                </div>
             )}
 
             <div ref={playlistScrollRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto neon-scrollbar" style={{ overflowAnchor: 'none' }}>
@@ -1484,7 +1532,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                         <p className="font-bold text-white font-persian">{t('noSongs')}</p>
                         <p className="text-sm text-gray-500 font-persian">{t('addSongsDesc')}</p>
-                        <button onClick={handleAddFolder} disabled={isScanning} className="mt-1 px-5 py-2.5 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-pink-900/30 hover:shadow-[0_0_20px_rgba(236,72,153,0.35)] active:scale-95 disabled:opacity-50"><FolderPlus size={16} />{t('addFolder')}</button>
+                        <button onClick={() => setIsLibraryOpen(true)} className="mt-1 px-5 py-2.5 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-pink-900/30 hover:shadow-[0_0_20px_rgba(236,72,153,0.35)] active:scale-95"><FolderPlus size={16} /><span>{t('libraryBtn')}</span></button>
                     </div>
                 ) : isSearching && virtual.rows.length === 0 ? (
                     <div className="h-full p-4 flex flex-col items-center justify-center gap-3 text-gray-500 animate-fade-in">
