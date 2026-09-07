@@ -12,36 +12,44 @@ interface WhatsNewModalProps {
 const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  const { isRTL } = useLanguage();
+  const { t, isRTL, language } = useLanguage();
   const currentRelease = CHANGELOG.find(c => c.version === VERSION) || CHANGELOG[0];
+  const useFa = language === 'fa' && !!currentRelease.featuresFa;
+  const itemsFor = (key: 'added' | 'fixed' | 'removed') => {
+    if (useFa) {
+      const faItems = currentRelease.featuresFa?.[key];
+      if (faItems && faItems.length > 0) return faItems;
+    }
+    return currentRelease.features[key] || [];
+  };
 
   const sections = [
     {
-      key: 'added',
-      label: 'Added',
+      key: 'added' as const,
+      label: t('whatsNewAdded'),
       icon: PlusCircle,
       chip: 'bg-gradient-to-r from-emerald-500/15 to-teal-500/15 border-emerald-500/30 text-emerald-300',
       iconColor: 'text-emerald-400',
       dot: 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]',
-      items: currentRelease.features.added,
+      items: itemsFor('added'),
     },
     {
-      key: 'fixed',
-      label: 'Fixed',
+      key: 'fixed' as const,
+      label: t('whatsNewFixed'),
       icon: CheckCircle2,
       chip: 'bg-gradient-to-r from-blue-500/15 to-cyan-500/15 border-blue-500/30 text-blue-300',
       iconColor: 'text-blue-400',
       dot: 'bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.7)]',
-      items: currentRelease.features.fixed,
+      items: itemsFor('fixed'),
     },
     {
-      key: 'removed',
-      label: 'Removed',
+      key: 'removed' as const,
+      label: t('whatsNewRemoved'),
       icon: MinusCircle,
       chip: 'bg-gradient-to-r from-red-500/15 to-rose-500/15 border-red-500/30 text-red-300',
       iconColor: 'text-red-400',
       dot: 'bg-red-400 shadow-[0_0_10px_rgba(248,113,113,0.7)]',
-      items: currentRelease.features.removed,
+      items: itemsFor('removed'),
     },
   ];
 
@@ -87,13 +95,13 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose }) => {
 
             <div className="min-w-0">
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-red-600/20 to-violet-600/20 border border-white/10 font-mono text-xs text-transparent bg-clip-text bg-gradient-to-r from-red-300 to-violet-300 font-bold tracking-wider">
-                Version {currentRelease.version}
+                {t('whatsNewVersion')} {currentRelease.version}
               </span>
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-red-200 to-violet-300 mt-3">
-                WHAT'S NEW
+                {t('whatsNewTitle')}
               </h1>
               <p className="font-mono text-[11px] sm:text-xs text-zinc-500 tracking-widest uppercase mt-2">
-                Released {currentRelease.date}
+                {t('whatsNewReleased')} {currentRelease.date}
               </p>
             </div>
           </div>
@@ -102,7 +110,7 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose }) => {
         <div className="relative flex-1 overflow-y-auto custom-scrollbar p-5 sm:p-8">
           <div className="space-y-8">
             {sections.map(section => (
-              section.items && section.items.length > 0 && (
+              section.items.length > 0 && (
                 <div key={section.key}>
                   <h3 className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border font-bold uppercase tracking-wider text-sm mb-4 ${section.chip}`}>
                     <section.icon size={15} className={section.iconColor} />
@@ -130,9 +138,9 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose }) => {
             onClick={onClose}
             className="px-10 py-3 bg-gradient-to-r from-red-600 to-violet-600 text-white font-bold rounded-xl shadow-lg shadow-red-900/40 hover:shadow-red-900/60 hover:brightness-110 transition-all active:scale-95"
           >
-            Awesome!
+            {t('whatsNewAwesome')}
           </button>
-          <p className="text-[11px] text-zinc-500 font-persian">Enjoy the update</p>
+          <p className="text-[11px] text-zinc-500 font-persian">{t('whatsNewEnjoy')}</p>
         </div>
       </div>
     </div>

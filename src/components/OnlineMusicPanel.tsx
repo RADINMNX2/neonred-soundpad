@@ -146,7 +146,10 @@ const OnlineMusicPanel: React.FC<OnlineMusicPanelProps> = ({ extensions, onClose
           <ArrowLeft size={18} />
         </button>
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-black text-white tracking-tight font-persian flex items-center gap-2"><Radio size={16} className="text-pink-500" />{t('onlineTitle')}</h3>
+          <h3 className="text-lg font-black text-white tracking-tight font-persian flex items-center gap-2"><Radio size={16} className="text-pink-500" />{t('onlineTitle')}
+            <span className="shrink-0 px-2 py-0.5 rounded-lg text-[10px] font-black tracking-widest uppercase bg-amber-500/15 border border-amber-400/30 text-amber-300">{t('onlineDemoBadge')}</span>
+          </h3>
+          <p className="text-[11px] text-amber-400/80 font-persian">{t('onlineDemoNotice')}</p>
           <p className="text-[11px] text-gray-500 truncate font-persian">{t('onlineDesc')}</p>
         </div>
       </div>

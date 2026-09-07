@@ -2,7 +2,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { 
   Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, 
-  ListMusic, Music, Volume2, Trash2, Plus, Disc, Sliders, X, MousePointer2, Settings, Shrink, Globe, FileText, Search, XCircle, ChevronUp
+  ListMusic, Music, Volume2, Trash2, Plus, Disc, Sliders, X, MousePointer2, Settings, Shrink, Globe, FileText, Search, XCircle, ChevronUp,
+  Folder, FolderPlus, Library, RefreshCw, HardDrive, Loader2
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { MusicTrack, ExtendedAudioElement, VisualizerConfig, SpatiflacExtension, OnlineTrack, QualityOption } from '../types';
@@ -177,6 +178,242 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   useEffect(() => { nextPlaylistIdxRef.current = playlist.length; }, [playlist]);
   // Guards against double-triggered online plays (e.g. rapid handleNext clicks)
   const onlinePlayInFlightRef = useRef(false);
+
+  // --- SMART MUSIC LIBRARY (folder scan · deleted-file sync · play-in-place) ---
+  const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+
+  const [libraryFolders, setLibraryFolders] = useState<string[]>(() => {
+    try {
+      const s = localStorage.getItem('music_library_folders');
+      return s ? JSON.parse(s) : [];
+    } catch { return []; }
+  });
+  const libraryFoldersRef = useRef(libraryFolders);
+  useEffect(() => { libraryFoldersRef.current = libraryFolders; }, [libraryFolders]);
+
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [libScanCount, setLibScanCount] = useState(0);
+  const [libStatus, setLibStatus] = useState<string | null>(null);
+  const scanningRef = useRef(false);
+  const missingCheckBusyRef = useRef(false);
+  const autoSyncedRef = useRef(false);
+  const enrichedPathsRef = useRef<Set<string>>(new Set());
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    const tId = setTimeout(() => {
+      try { localStorage.setItem('music_library_folders', JSON.stringify(libraryFolders)); }
+      catch (e) { console.warn('Failed to persist library folders', e); }
+    }, 300);
+    return () => clearTimeout(tId);
+  }, [libraryFolders]);
+
+  const enrichNewTracks = (tracks: MusicTrack[]) => {
+    const target = tracks
+      .filter(t => t.path && !enrichedPathsRef.current.has(normPath(t.path)))
+      .slice(0, 1500);
+    if (target.length === 0) return;
+    target.forEach(t => enrichedPathsRef.current.add(normPath(t.path!)));
+    const updates: Record<string, MusicTrack> = {};
+    let idx = 0;
+    const POOL = 6;
+    const worker = async () => {
+      while (idx < target.length) {
+        const t = target[idx++];
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 4000);
+          const res = await fetch(`file://${t.path}`, { signal: ctrl.signal });
+          clearTimeout(timer);
+          const blob = await res.blob();
+          const meta = await parseAudioMetadata(blob);
+          updates[t.id] = {
+            ...t,
+            title: meta.title || t.title,
+            artist: meta.artist || t.artist,
+            album: meta.album || t.album,
+          };
+        } catch (e) { /* unreadable file — keep filename-based title */ }
+      }
+    };
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < POOL; i++) workers.push(worker().catch(() => {}));
+    Promise.all(workers).then(() => {
+      if (!mountedRef.current) return;
+      const keys = Object.keys(updates);
+      if (keys.length === 0) return;
+      setPlaylist(prev => {
+        const byId = new Map<string, MusicTrack>();
+        for (let i = 0; i < keys.length; i++) byId.set(keys[i], updates[keys[i]]);
+        return prev.map(tr => byId.get(tr.id) || tr);
+      });
+    });
+  };
+
+  const runMissingCheck = useCallback(async () => {
+    if (missingCheckBusyRef.current) return;
+    const paths = playlistRef.current.filter(t => t.path && !t.onlineId).map(t => t.path as string);
+    if (paths.length === 0) return;
+    missingCheckBusyRef.current = true;
+    try {
+      const missing: string[] = [];
+      for (let i = 0; i < paths.length; i += 50000) {
+        const res = await window.electronAPI.filterMissingTracks(paths.slice(i, i + 50000));
+        if (res && res.missing && res.missing.length) missing.push(...res.missing);
+      }
+      if (missing.length === 0) return;
+      const missingNorm = new Set(missing.map(normPath));
+      const removeIds = new Set<string>();
+      const currentList = playlistRef.current;
+      for (let i = 0; i < currentList.length; i++) {
+        const tr = currentList[i];
+        if (tr.path && missingNorm.has(normPath(tr.path))) removeIds.add(tr.id);
+      }
+      if (removeIds.size === 0) return;
+      const curIdx = currentTrackIndexRef.current;
+      const curId = curIdx !== -1 ? currentList[curIdx]?.id : undefined;
+      const isCurRemoved = curId ? removeIds.has(curId) : false;
+      let shift = 0;
+      if (curIdx !== -1 && !isCurRemoved) {
+        for (let i = 0; i < curIdx; i++) if (removeIds.has(currentList[i].id)) shift++;
+      }
+      setPlaylist(prev => {
+        if (prev.length === 0) return prev;
+        return prev.filter(t => !removeIds.has(t.id));
+      });
+      if (isCurRemoved) {
+        setCurrentTrackIndex(-1);
+        setIsPlaying(false);
+        setOnlineSession(null);
+        if (audioElementRef.current) audioElementRef.current.pause();
+      } else if (shift > 0) {
+        setCurrentTrackIndex(prev => (prev === -1 ? prev : prev - shift));
+      }
+      if (mountedRef.current) {
+        setLibStatus(tRef.current('libraryMissingRemoved').replace('{count}', String(removeIds.size)));
+      }
+    } finally {
+      missingCheckBusyRef.current = false;
+    }
+  }, []);
+
+  const scanLibraryFolders = useCallback((foldersInput?: string[]) => {
+    const folders = foldersInput && foldersInput.length > 0 ? foldersInput : libraryFoldersRef.current;
+    if (folders.length === 0 || scanningRef.current || !mountedRef.current) return;
+    scanningRef.current = true;
+    setIsScanning(true);
+    setLibScanCount(0);
+    setLibStatus(null);
+    const foundPaths: string[] = [];
+    const cleanupFns: (() => void)[] = [];
+
+    const finishError = (error: string) => {
+      cleanupFns.forEach(c => c());
+      scanningRef.current = false;
+      if (mountedRef.current) {
+        setIsScanning(false);
+        setLibStatus(error);
+      }
+    };
+
+    const onChunk = (payload: { paths: string[]; found: number }) => {
+      foundPaths.push(...payload.paths);
+      if (mountedRef.current) setLibScanCount(payload.found);
+    };
+
+    const onComplete = (payload: { total: number }) => {
+      cleanupFns.forEach(c => c());
+      scanningRef.current = false;
+      if (!mountedRef.current) return;
+      setIsScanning(false);
+      const existing = new Set<string>();
+      const currentList = playlistRef.current;
+      for (let i = 0; i < currentList.length; i++) {
+        const tr = currentList[i];
+        if (tr.path) existing.add(normPath(tr.path));
+      }
+      const toAdd = foundPaths.filter(p => !existing.has(normPath(p)));
+      if (toAdd.length > 0) {
+        const newTracks: MusicTrack[] = toAdd.map(p => {
+          const parts = p.split(/[\\/]/).filter(Boolean);
+          const fname = parts[parts.length - 1] || 'Unknown';
+          const parent = parts.length > 1 ? parts[parts.length - 2] : undefined;
+          return {
+            id: crypto.randomUUID(),
+            title: fname.replace(/\.[^/.]+$/, '').trim() || fname,
+            artist: tRef.current('unknownArtist'),
+            album: parent || tRef.current('unknownAlbum'),
+            url: `file://${p}`,
+            path: p,
+            duration: 0,
+          };
+        });
+        setPlaylist(prev => {
+          const seen = new Set<string>();
+          for (let i = 0; i < prev.length; i++) {
+            const tr = prev[i];
+            if (tr.path) seen.add(normPath(tr.path));
+          }
+          const merged = [...prev];
+          let added = 0;
+          for (let i = 0; i < newTracks.length; i++) {
+            const nt = newTracks[i];
+            if (nt.path && seen.has(normPath(nt.path))) continue;
+            seen.add(normPath(nt.path));
+            merged.push(nt);
+            added++;
+          }
+          return merged;
+        });
+        enrichNewTracks(newTracks);
+        setLibStatus(tRef.current('libraryNewAdded').replace('{count}', String(toAdd.length)));
+      } else {
+        setLibStatus(tRef.current('libraryFoundTracks').replace('{count}', String(payload.total)));
+      }
+      runMissingCheck();
+    };
+
+    const onError = (payload: { error: string }) => finishError(payload.error || 'Scan failed');
+
+    cleanupFns.push(window.electronAPI.onLibraryScanChunk(onChunk));
+    cleanupFns.push(window.electronAPI.onLibraryScanComplete(onComplete));
+    cleanupFns.push(window.electronAPI.onLibraryScanError(onError));
+    window.electronAPI.scanLibrary(folders);
+  }, [runMissingCheck]);
+
+  const handleAddFolder = useCallback(async () => {
+    const res = await window.electronAPI.pickMusicFolders();
+    if (!res || res.cancelled || !res.paths || res.paths.length === 0) return;
+    let changed = false;
+    setLibraryFolders(prev => {
+      const next = [...prev];
+      for (const p of res.paths) {
+        if (!next.some(x => normPath(x) === normPath(p))) { next.push(p); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    scanLibraryFolders(res.paths);
+  }, [scanLibraryFolders]);
+
+  const removeLibraryFolder = (folder: string) => {
+    setLibraryFolders(prev => prev.filter(f => normPath(f) !== normPath(folder)));
+  };
+
+  useEffect(() => {
+    if (autoSyncedRef.current) return;
+    autoSyncedRef.current = true;
+    const timer = setTimeout(() => {
+      if (!mountedRef.current) return;
+      runMissingCheck();
+      if (libraryFoldersRef.current.length > 0) scanLibraryFolders(libraryFoldersRef.current);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [runMissingCheck, scanLibraryFolders]);
 
   useEffect(() => {
     const handler = () => setOnlineExtensions(loadExtensions());
@@ -666,12 +903,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     if (!files) return;
     setIsAdding(true);
     const newTracks: MusicTrack[] = [];
+    const knownPaths = new Set<string>();
+    for (let i = 0; i < playlistRef.current.length; i++) {
+      const tr = playlistRef.current[i];
+      if (tr.path) knownPaths.add(normPath(tr.path));
+    }
     
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|flac|ogg|m4a)$/i)) continue;
         const originalPath = (file as any).path;
+        if (originalPath && knownPaths.has(normPath(originalPath))) continue;
         let url = originalPath ? `file://${originalPath}` : await fileToBase64(file);
+        const key = originalPath ? normPath(originalPath) : url;
+        if (knownPaths.has(key)) continue;
+        knownPaths.add(key);
 
         let title = file.name.replace(/\.[^/.]+$/, "");
         let artist = t('unknownArtist');
@@ -1141,7 +1387,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         )}
                         <div className="w-px h-6 bg-white/10 mx-1"></div>
                         <button onClick={() => setOnlineOpen(true)} className="px-3 py-2 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-pink-500/40 shadow-lg shadow-pink-900/20 hover:shadow-[0_0_20px_rgba(236,72,153,0.35)] active:scale-95"><Globe size={16} /><span>{t('onlineBtn')}</span></button>
-                        <label className="cursor-pointer px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-white/5 hover:border-white/20"><Plus size={16} /><span>{t('addSongs')}</span><input type="file" multiple accept="audio/*" className="hidden" onChange={(e) => handleFileAdd(e.target.files)} /></label>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleAddFolder} disabled={isScanning} className="cursor-pointer px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-white/5 hover:border-white/20 disabled:opacity-50 active:scale-95" title={t('addFolder')}><FolderPlus size={16} /><span>{t('addFolder')}</span></button>
+                            <label className="cursor-pointer px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-white/5 hover:border-white/20"><Plus size={16} /><span>{t('addSongs')}</span><input type="file" multiple accept="audio/*" className="hidden" onChange={(e) => handleFileAdd(e.target.files)} /></label>
+                            <button onClick={() => setIsLibraryOpen(prev => !prev)} className={`p-2 rounded-xl transition-all border ${isLibraryOpen ? 'bg-pink-500/15 text-pink-400 border-pink-500/30' : 'bg-zinc-800 hover:bg-zinc-700 text-gray-400 hover:text-white border-white/5'}`} title={t('libraryManage')}><Library size={16} /></button>
+                        </div>
                     </div>
                 </div>
                 {isSearchOpen && (
@@ -1164,6 +1414,49 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     </div>
                 )}
             </div>
+
+            {isLibraryOpen && (
+                <>
+                    <div className="absolute inset-0 z-30" onClick={() => setIsLibraryOpen(false)}></div>
+                    <div className="absolute top-16 right-3 z-40 w-80 max-w-[calc(100%-1.5rem)] rounded-2xl bg-zinc-950/95 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/60 p-4 space-y-3 animate-slide-up">
+                        <div className="flex items-center justify-between">
+                            <h4 className="font-bold text-white font-persian flex items-center gap-2"><HardDrive size={15} className="text-pink-500" />{t('libraryTitle')}</h4>
+                            <button onClick={() => setIsLibraryOpen(false)} className="p-1 text-gray-500 hover:text-white transition-colors"><X size={15} /></button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 font-persian leading-relaxed">{t('libraryDesc')}</p>
+                        <div className="flex gap-2">
+                            <button onClick={handleAddFolder} className="flex-1 px-3 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95"><FolderPlus size={14} />{t('addFolder')}</button>
+                            <button onClick={() => scanLibraryFolders()} disabled={libraryFolders.length === 0 || isScanning} className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border border-white/5 disabled:opacity-40"><RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />{t('libraryRescan')}</button>
+                        </div>
+                        {isScanning && (
+                            <div className="flex items-center gap-2 text-[11px] text-pink-300">
+                                <Loader2 size={13} className="animate-spin" />{t('libraryScanning')}
+                                <span className="font-mono ml-auto">{libScanCount.toLocaleString()}</span>
+                            </div>
+                        )}
+                        {libStatus && !isScanning && (
+                            <p className="text-[11px] text-emerald-300/90 font-persian">{libStatus}</p>
+                        )}
+                        <div className="flex items-start gap-2 text-[10px] font-mono uppercase tracking-widest text-gray-600">
+                            <Disc size={12} className="text-zinc-600 shrink-0 mt-0.5" />
+                            <span className="font-persian normal-case tracking-normal text-gray-500">{t('libraryPlayInPlace')} — {t('libraryPlayInPlaceDesc')}</span>
+                        </div>
+                        {libraryFolders.length === 0 ? (
+                            <p className="text-xs text-gray-600 font-persian">{t('libraryEmpty')}</p>
+                        ) : (
+                            <ul className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                                {libraryFolders.map(f => (
+                                    <li key={normPath(f)} className="flex items-center gap-2 text-[11px] text-gray-400 bg-zinc-900/60 border border-white/5 rounded-lg px-2 py-1.5">
+                                        <Folder size={12} className="text-zinc-500 shrink-0" />
+                                        <span className="truncate flex-1" dir="ltr">{f}</span>
+                                        <button onClick={() => removeLibraryFolder(f)} className="p-0.5 text-gray-600 hover:text-red-400 transition-colors" title={t('removeTrack')}><X size={12} /></button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </>
+            )}
 
             <div ref={playlistScrollRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto neon-scrollbar" style={{ overflowAnchor: 'none' }}>
                 {isAdding ? (
@@ -1191,6 +1484,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                         </div>
                         <p className="font-bold text-white font-persian">{t('noSongs')}</p>
                         <p className="text-sm text-gray-500 font-persian">{t('addSongsDesc')}</p>
+                        <button onClick={handleAddFolder} disabled={isScanning} className="mt-1 px-5 py-2.5 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-pink-900/30 hover:shadow-[0_0_20px_rgba(236,72,153,0.35)] active:scale-95 disabled:opacity-50"><FolderPlus size={16} />{t('addFolder')}</button>
                     </div>
                 ) : isSearching && virtual.rows.length === 0 ? (
                     <div className="h-full p-4 flex flex-col items-center justify-center gap-3 text-gray-500 animate-fade-in">

@@ -51,6 +51,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readLyricsFile: (path) => ipcRenderer.invoke('read-lyrics-file', path),
   readEmbeddedLyrics: (path) => ipcRenderer.invoke('read-embedded-lyrics', path),
   
+  // Smart Music Library (folder scan / deleted-file sync)
+  pickMusicFolders: () => ipcRenderer.invoke('library:pick-folders'),
+  scanLibrary: (folders) => ipcRenderer.send('library:scan', folders),
+  filterMissingTracks: (paths) => ipcRenderer.invoke('library:filter-missing', paths),
+  onLibraryScanChunk: (callback) => {
+      const sub = (e, payload) => callback(payload);
+      ipcRenderer.on('library:scan-chunk', sub);
+      return () => ipcRenderer.removeListener('library:scan-chunk', sub);
+  },
+  onLibraryScanComplete: (callback) => {
+      const sub = (e, payload) => callback(payload);
+      ipcRenderer.on('library:scan-complete', sub);
+      return () => ipcRenderer.removeListener('library:scan-complete', sub);
+  },
+  onLibraryScanError: (callback) => {
+      const sub = (e, payload) => callback(payload);
+      ipcRenderer.on('library:scan-error', sub);
+      return () => ipcRenderer.removeListener('library:scan-error', sub);
+  },
+  
   // Installer
   installVBCable: () => ipcRenderer.invoke('install-vb-cable'),
 

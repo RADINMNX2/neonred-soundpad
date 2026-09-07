@@ -41,6 +41,18 @@ export const translations = {
     playNow: "Play Now",
     dragHint: "Drag to reorder",
     addingTracks: "Adding tracks...",
+    // Smart Music Library
+    libraryTitle: "Music Library",
+    libraryDesc: "Point NeonRed at your music folders — it scans them instantly and keeps your playlist in sync with your disk. Nothing is ever copied or moved.",
+    libraryScanning: "Scanning...",
+    libraryFoundTracks: "{count} tracks found",
+    libraryNewAdded: "{count} new tracks added",
+    libraryMissingRemoved: "{count} deleted files removed from playlist",
+    libraryEmpty: "No folders yet — hit Add Folder to scan your music.",
+    libraryRescan: "Re-scan All",
+    libraryPlayInPlace: "DISC-LESS",
+    libraryPlayInPlaceDesc: "plays straight from the original folder — zero space wasted.",
+    libraryManage: "Manage Folders",
     micEqResponseCurve: "RESPONSE CURVE",
     micEqLive: "LIVE",
     micEqDspActive: "Real-time Mic Audio DSP Processing Active",
@@ -51,6 +63,8 @@ export const translations = {
     // Online Music (Spatiflac)
     onlineBtn: "Online",
     onlineTitle: "Online Music",
+    onlineDemoBadge: "DEMO",
+    onlineDemoNotice: "Preview build — streaming & downloads may be limited while Spatiflac providers are stabilized.",
     onlineDesc: "Powered by Spatiflac extensions — search millions of songs, pick quality, play & download.",
     onlineSearchPlaceholder: "Search millions of songs...",
     readyMusic: "Ready For You",
@@ -264,6 +278,16 @@ export const translations = {
     endTour: "End Tour",
     clickToContinue: "Click to continue",
     skipTour: "Skip Tour",
+
+    // What's New Modal
+    whatsNewVersion: "Version",
+    whatsNewTitle: "WHAT'S NEW",
+    whatsNewReleased: "Released",
+    whatsNewAdded: "Added",
+    whatsNewFixed: "Fixed",
+    whatsNewRemoved: "Removed",
+    whatsNewAwesome: "Awesome!",
+    whatsNewEnjoy: "Enjoy the update",
   },
   fa: {
     // Sidebar
@@ -287,6 +311,18 @@ export const translations = {
     playlist: "لیست پخش",
     addSongs: "افزودن فایل",
     addFolder: "افزودن پوشه",
+    // Smart Music Library (خودمونی)
+    libraryTitle: "کتابخونه موزیک",
+    libraryDesc: "پوشه‌های موزیکت رو به برنامه معرفی کن؛ خودش سریع همه رو پیدا میکنه و لیست پخش رو با دیسک هماهنگ نگه میداره. هیچ فایلی کپی یا جابه‌جا نمیشه.",
+    libraryScanning: "در حال اسکن...",
+    libraryFoundTracks: "{count} تا آهنگ پیدا شد",
+    libraryNewAdded: "{count} تا آهنگ جدید اضافه شد",
+    libraryMissingRemoved: "{count} فایل پاک‌شده از لیست پخش حذف شد",
+    libraryEmpty: "هنوز پوشه‌ای اضافه نکردی — بزن روی دکمه «افزودن پوشه» تا موزیکت رو اسکن کنه.",
+    libraryRescan: "اسکن دوباره همه",
+    libraryPlayInPlace: "بدون کپی",
+    libraryPlayInPlaceDesc: "مستقیم از همون پوشهٔ خودش پخش میشه — یک بایت فضا هم اشغال نمیشه.",
+    libraryManage: "مدیریت پوشه‌ها",
     noSongs: "لیست پخشت خالیه که!",
     addSongsDesc: "آهنگ‌هاتو با فرمت MP3 یا WAV اضافه کن",
     unknownArtist: "خواننده ناشناس",
@@ -314,6 +350,8 @@ export const translations = {
     // Online Music (Spatiflac)
     onlineBtn: "آنلاین",
     onlineTitle: "موزیک آنلاین",
+    onlineDemoBadge: "دمو",
+    onlineDemoNotice: "این بخش هنوز کامل نشده و نسخهٔ آزمایشیه — تا وقتی سرویس‌های اسپاتیفلاک درست بشن، پخش و دانلود ممکنه محدود باشه.",
     onlineDesc: "قدرت گرفته از اکستنشن‌های اسپاتیفلاک — میلیون‌ها آهنگ رو جستجو کن، کیفیت رو انتخاب کن، پخش کن و دانلود کن.",
     onlineSearchPlaceholder: "دنبال آهنگت بگرد...",
     readyMusic: "آماده برات",
@@ -527,5 +565,15 @@ export const translations = {
     endTour: "پایان تور",
     clickToContinue: "برای ادامه کلیک کنید",
     skipTour: "رد شدن از تور",
+
+    // What's New Modal (خودمونی)
+    whatsNewVersion: "نسخه",
+    whatsNewTitle: "چی جدید شده؟",
+    whatsNewReleased: "منتشر شده در",
+    whatsNewAdded: "اضافه شده",
+    whatsNewFixed: "درست شد",
+    whatsNewRemoved: "حذف شد",
+    whatsNewAwesome: "بزن بریم!",
+    whatsNewEnjoy: "از آپدیت لذت ببر",
   }
 };

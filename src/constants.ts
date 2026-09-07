@@ -1,6 +1,6 @@
 
 export const APP_NAME = "NeonRed Soundpad";
-export const VERSION = "2.3.0";
+export const VERSION = "2.4.0";
 
 export const COLORS = {
   RED_GLOW: "0 0 20px rgba(239, 68, 68, 0.6)",

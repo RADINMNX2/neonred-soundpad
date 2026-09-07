@@ -7,9 +7,42 @@ export interface ChangelogEntry {
     fixed?: string[];
     removed?: string[];
   };
+  featuresFa?: {
+    added?: string[];
+    fixed?: string[];
+    removed?: string[];
+  };
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "2.4.0",
+    date: "2026-09-08",
+    features: {
+      added: [
+        "Smart Music Library: point NeonRed at your music folders and it scans them at lightning speed (batched in the background, zero UI stutter) — every track plays straight from its original folder, nothing is copied or moved, so zero space is wasted.",
+        "Auto-Sync With Your Disk: the app remembers your library folders and re-scans them, automatically adding newly discovered songs and removing tracks whose files have been deleted from disk — your playlist is always a true mirror of your hard drive.",
+        "Deleted-file cleanup is fully incremental and processed in the background, so even a 1,000,000-track library stays buttery smooth while syncing.",
+        "Casual Persian What's New: the changelog now speaks casual Persian, so Persian-speaking users instantly understand what changed in every release.",
+        "Online Music is now honestly labeled as a preview/demo build while the Spatiflac provider runtime is finalized.",
+      ],
+      fixed: [
+        "Files discovered by more than one folder scan (or added manually before a scan) are now deduplicated by their real path — no more double entries.",
+      ]
+    },
+    featuresFa: {
+      added: [
+        "کتابخونهٔ هوشمند موزیک: پوشه‌هات رو معرفی کن و برنامه با سرعت نور اسکنشون میکنه (توی پس‌زمینه و بدون لگ) — همهٔ آهنگ‌ها مستقیم از همون پوشهٔ خودشون پخش میشن، نه کپی میشن نه جابه‌جا؛ یه بایت فضا هم اشغال نمیشه.",
+        "همگام‌سازی خودکار با دیسکت: برنامه پوشه‌هات رو یادش می‌مونه و همیشه چکشون میکنه — آهنگ‌های تازه‌اضافه‌شده رو خودش پیدا میکنه و آهنگ‌هایی که فایلشون از دیسک پاک شده رو هم خودش از لیست پخش حذف میکنه.",
+        "پاک‌سازی فایل‌های حذف‌شده کاملاً توی پس‌زمینه و مرحله‌به‌مرحله انجام میشه، پس حتی با یه کتابخونهٔ ۱٬۰۰۰٬۰۰۰ تایی بازم همه‌چیز نرم و روانه.",
+        "ول‌سرویس فارسی خودمونی: چیزای جدید که تغییر کرده حالا به فارسی خودمونی نشون داده میشه تا فارسی‌زبانا سریع بفهمن چی عوض شده.",
+        "بخش موزیک آنلاین حالا صادقانه به‌عنوان نسخهٔ پیش‌نمایش (دمو) نشون داده میشه تا وقتی موتور اسپاتیفلاک کاملاً آماده بشه.",
+      ],
+      fixed: [
+        "آهنگ‌هایی که با چند بار اسکن (یا با افزودن دستی قبل از اسکن) پیدا می‌شن حالا بر اساس مسیر واقعیشون تکراری‌زدایی می‌شن — دیگه دوبار توی لیست نمیاد.",
+      ]
+    }
+  },
   {
     version: "2.3.0",
     date: "2026-09-08",
@@ -23,6 +56,18 @@ export const CHANGELOG: ChangelogEntry[] = [
         "Fixed the 'page keeps refreshing' bug: the old code mounted every single song as a real element, so a big library would freeze the page until the window auto-reloaded in an endless loop. Now only ~20 rows are in the DOM at any moment.",
         "Fixed the loading screen occasionally restarting or never finishing, caused by an unstable completion callback.",
         "Fixed blurry/faded text on the active track title and current lyric line.",
+      ]
+    },
+    featuresFa: {
+      added: [
+        "لیست پخش مجازی (همونی که واقعاً مهم بود): حالا فقط تایی‌ها رندر میشن که واقعاً دیده میشن، مهم نیست لیستت چقدر گنده باشه. حتی با ۱٬۰۰۰٬۰۰۰ آهنگ بازم همه‌چیز روانه — اسکرول، جستجو، حالت انتخاب و کشیدن و رها کردن همه فوری کار می‌کنن به‌جای اینکه صفحه قفل بشه و بپره.",
+        "شروع و ذخیره‌سازی بدون فریز: لیست‌های گنده دیگه موقع بالا اومدن برنامه رو قفل نمی‌کنن، و ذخیره‌سازی بعد از ۵٬۰۰۰ آهنگ متوقف میشه تا هیچوقت برنامه لکنت نکنه.",
+        "متن‌های تیزتر همه‌جا: عنوان آهنگ در حال پخش و خط فعال لیریک دیگه از متن گرادیانی GPU استفاده نمی‌کنن (که روی ویندوز مات می‌شد) — حالا شفاف و نئونی با یه هالهٔ نرم رندر میشن.",
+      ],
+      fixed: [
+        "باگ «صفحه مدام رفرش میشد» درست شد: کد قبلی همهٔ آهنگ‌ها رو به‌صورت المان واقعی می‌ساخت، پس با یه کتابخونهٔ بزرگ صفحه فریز می‌شد تا پنجره توی یه حلقهٔ بی‌پایان اتو-ری‌لود بشه. حالا فقط ~۲۰ ردیف توی DOM هستن.",
+        "صفحهٔ لودینگ که بعضی وقت‌ها دوباره شروع می‌شد یا تموم نمی‌شد درست شد (مشکل از یه کالبک ناپایدار بود).",
+        "متن مات/کمرنگ روی عنوان آهنگ فعال و خط لیریک فعلی درست شد.",
       ]
     }
   },

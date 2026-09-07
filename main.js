@@ -623,6 +623,147 @@ ipcMain.handle('delete-sound-file', async (event, filePath) => {
   }
 });
 
+// --- Smart Music Library (fast folder scanning, never copies files) ---
+const LIBRARY_AUDIO_EXTS = new Map([
+  ['.mp3', true], ['.wav', true], ['.flac', true], ['.ogg', true], ['.m4a', true],
+  ['.aac', true], ['.opus', true], ['.wma', true], ['.m4b', true], ['.webm', true],
+]);
+let libraryScanActive = false;
+
+// Iterative recursive walk with a small worker pool — fast, no stack limits, symlinks ignored.
+function collectAudioFiles(rootDir, onChunk, chunkSize) {
+  return new Promise((resolve, reject) => {
+    if (!rootDir || typeof rootDir !== 'string') return reject(new Error('Invalid folder path'));
+    const queue = [rootDir];
+    let cursor = 0;
+    let working = 0;
+    const found = [];
+    let failed = false;
+    const WORKERS = 32;
+
+    const flushChunk = () => {
+      if (found.length >= chunkSize) {
+        try { onChunk(found.splice(0, found.length)); } catch (e) { failed = true; }
+      }
+    };
+
+    const pump = async () => {
+      while (!failed) {
+        if (cursor >= queue.length) {
+          // No dirs left to read, but other workers may still be pushing.
+          if (working === 0) break;
+          await new Promise(r => setTimeout(r, 0));
+          continue;
+        }
+        const dir = queue[cursor++];
+        working++;
+        let entries;
+        try {
+          entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        } catch (e) {
+          working--;
+          continue;
+        }
+        for (const entry of entries) {
+          const name = entry.name;
+          if (name.startsWith('.')) continue;
+          const full = path.join(dir, name);
+          if (entry.isDirectory()) {
+            const n = name.toLowerCase();
+            if (n === 'node_modules' || n === '$recycle.bin' || n === 'system volume information' || n === 'appdata') continue;
+            queue.push(full);
+          } else if (entry.isFile()) {
+            const ext = path.extname(name).toLowerCase();
+            if (LIBRARY_AUDIO_EXTS.has(ext)) {
+              found.push(full);
+              flushChunk();
+            }
+          }
+        }
+        working--;
+      }
+      if (failed) reject(new Error('Library scan cancelled'));
+    };
+
+    const workers = [];
+    for (let i = 0; i < WORKERS; i++) workers.push(pump());
+    Promise.all(workers).then(() => {
+      if (failed) return;
+      if (found.length > 0) {
+        try { onChunk(found.splice(0, found.length)); } catch (e) { return reject(new Error('Library scan cancelled')); }
+      }
+      resolve();
+    }).catch(reject);
+  });
+}
+
+ipcMain.handle('library:pick-folders', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Add Music Folders',
+      buttonLabel: 'Scan Folder',
+      properties: ['openDirectory', 'multiSelections'],
+    });
+    return { cancelled: result.canceled, paths: result.filePaths || [] };
+  } catch (error) {
+    return { cancelled: true, paths: [], error: error.message };
+  }
+});
+
+ipcMain.on('library:scan', async (event, folders) => {
+  if (libraryScanActive) {
+    log.info('Library scan already in progress — ignoring duplicate request.');
+    return;
+  }
+  if (!Array.isArray(folders) || folders.length === 0) {
+    event.sender.send('library:scan-error', { error: 'No folders to scan' });
+    return;
+  }
+  libraryScanActive = true;
+  const start = Date.now();
+  let total = 0;
+  try {
+    const emitChunk = (paths) => {
+      total += paths.length;
+      event.sender.send('library:scan-chunk', { paths, found: total, elapsedMs: Date.now() - start });
+    };
+    for (const folder of folders) {
+      if (!fs.existsSync(folder)) continue;
+      const stat = await fs.promises.stat(folder);
+      if (!stat.isDirectory()) continue;
+      await collectAudioFiles(folder, emitChunk, 4000);
+    }
+    event.sender.send('library:scan-complete', { total, elapsedMs: Date.now() - start });
+  } catch (error) {
+    event.sender.send('library:scan-error', { error: error.message || 'Scan failed' });
+  } finally {
+    libraryScanActive = false;
+  }
+});
+
+// Batch existence check — returns which files are missing so the playlist can drop them.
+ipcMain.handle('library:filter-missing', async (event, paths) => {
+  if (!Array.isArray(paths)) return { missing: [] };
+  const capped = paths.slice(0, 100000).filter(p => typeof p === 'string' && p.length > 0);
+  const missing = [];
+  let cursor = 0;
+  const WORKERS = 256;
+  const runWorker = async () => {
+    while (cursor < capped.length) {
+      const idx = cursor++;
+      try {
+        await fs.promises.access(capped[idx]);
+      } catch (e) {
+        missing.push(capped[idx]);
+      }
+    }
+  };
+  const workers = [];
+  for (let i = 0; i < WORKERS; i++) workers.push(runWorker());
+  await Promise.all(workers);
+  return { missing };
+});
+
 function downloadUrl(url, destPath, onProgress) {
   return new Promise((resolve, reject) => {
     const follow = (u, redirectsLeft) => {

@@ -236,6 +236,14 @@ declare global {
       saveSourceCode: () => Promise<{ success: boolean; error?: string; cancelled?: boolean }>;
       readLyricsFile: (path: string) => Promise<{ success: boolean; content?: string; error?: string }>;
       readEmbeddedLyrics: (path: string) => Promise<{ success: boolean; lyrics?: string; error?: string }>;
+
+      // Smart Music Library (folder scan / deleted-file sync)
+      pickMusicFolders: () => Promise<{ cancelled: boolean; paths: string[]; error?: string }>;
+      scanLibrary: (folders: string[]) => void;
+      filterMissingTracks: (paths: string[]) => Promise<{ missing: string[] }>;
+      onLibraryScanChunk: (callback: (payload: { paths: string[]; found: number; elapsedMs: number }) => void) => () => void;
+      onLibraryScanComplete: (callback: (payload: { total: number; elapsedMs: number }) => void) => () => void;
+      onLibraryScanError: (callback: (payload: { error: string }) => void) => () => void;
       
       // File Open
       onFileOpened: (callback: (path: string) => void) => () => void;
