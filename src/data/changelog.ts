@@ -16,6 +16,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.6.1",
+    date: "2026-09-08",
+    features: {
+      fixed: [
+        "Fixed a startup crash for everyone who had already installed v2.6.0 — the new metadata reader used a module that only ships ESM and crashed the app right at launch. It's now CommonJS-compatible, so the app opens instantly again (and Artist/Album/Cover/Duration still load).",
+      ]
+    },
+    featuresFa: {
+      fixed: [
+        "رفع کرش موقع اجرا برای همه کسایی که v2.6.0 رو نصب کرده بودن — خوندن متادیتای جدید از یه ماژولی استفاده می‌کرد که فقط نسخهٔ ESM داشت و همون اول اجرا برنامه رو کرش می‌کرد. حالا با نسخهٔ سازگار CommonJS عوض شد و برنامه دوباره فوری بالا میاد (و هنوز خواننده/آلبوم/کاور/تایم لود می‌شن).",
+      ]
+    }
+  },
+  {
     version: "2.6.0",
     date: "2026-09-08",
     features: {
