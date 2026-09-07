@@ -1,8 +1,27 @@
-node_modules
-build
-dist
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+dist/
+
+# Generated source package (created by prebuild)
 public/source.zip
+
+# Logs
 *.log
 npm-debug.log*
+electron-builder*.log
+
+# Environment & secrets
 .env
+.env.local
+.env.*.local
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

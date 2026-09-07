@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Pencil } from 'lucide-react';
 import { SoundEffect } from '../types';
+import { useEscapeKey } from '../utils/useEscapeKey';
 
 interface RenameModalProps {
   sound: SoundEffect | null;
@@ -10,6 +11,7 @@ interface RenameModalProps {
 }
 
 const RenameModal: React.FC<RenameModalProps> = ({ sound, isOpen, onClose, onSave }) => {
+  useEscapeKey(isOpen, onClose);
   const [name, setName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const focusTimerRef = useRef<number | null>(null);

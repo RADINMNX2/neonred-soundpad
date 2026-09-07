@@ -11,6 +11,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.2.0",
+    date: "2026-09-07",
+    features: {
+      added: [
+        "Escape-to-Close Everywhere: The Color Picker, Device Selector, Rename and Update modals now dismiss cleanly with the Escape key — no more hunting for the ✕.",
+        "Full Reduced-Motion Mode: All cinematic animations (page sweeps, EQ bars, pulse/spin/shimmer, halo, lyrics glow) are now switched off under the OS Reduce Motion setting and the in-app Low Power mode — smooth and battery-friendly.",
+        "Smoother Local Persistence: The Music Playlist and Visualizer Studio config now save with debouncing, so rapid editing no longer hammers localStorage.",
+      ],
+      fixed: [
+        "Modals that previously ignored the keyboard are fixed — Escape closes the Color Picker, Device Selector, Rename and Update dialogs consistently."
+      ]
+    }
+  },
+  {
     version: "2.1.2",
     date: "2026-08-16",
     features: {

@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Download, RefreshCw, X, Check, ArrowRight, Zap } from 'lucide-react';
 import { UpdateInfo, UpdateProgress } from '../types';
+import { useEscapeKey } from '../utils/useEscapeKey';
 
 interface UpdateModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   onDownload, 
   onInstall 
 }) => {
+  useEscapeKey(isOpen, onClose);
   if (!isOpen || !updateInfo) return null;
 
   const isDownloading = progress !== null && progress.percent < 100 && !isDownloaded;

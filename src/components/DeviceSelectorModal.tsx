@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Speaker, Mic2, Search, AlertCircle } from 'lucide-react';
 import { AudioDevice } from '../types';
+import { useEscapeKey } from '../utils/useEscapeKey';
 
 interface DeviceSelectorModalProps {
   title: string;
@@ -26,6 +27,7 @@ const DeviceSelectorModal: React.FC<DeviceSelectorModalProps> = ({
   type,
   customOptions = []
 }) => {
+  useEscapeKey(isOpen, onClose);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Combine custom options (like "Default" or "None") with real devices

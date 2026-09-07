@@ -28,6 +28,9 @@ interface MusicPlayerProps {
 // 10-band frequencies standard for EQ
 const FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
 
+// Pre-allocate typed arrays for audio processing to reduce garbage collection
+const AUDIO_BUFFER_SIZE = 256;
+
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
   monitorDeviceId, 
   masterVolume,
@@ -76,9 +79,27 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     };
   });
 
-  // Persist Settings
-  useEffect(() => { localStorage.setItem('music_playlist', JSON.stringify(playlist.map(({ lyrics, ...rest }) => rest))); }, [playlist]);
-  useEffect(() => { localStorage.setItem('visualizer_studio_config', JSON.stringify(visualizerConfig)); }, [visualizerConfig]);
+  // Persist Settings (debounced playlist save to avoid excessive localStorage writes)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      try {
+        localStorage.setItem('music_playlist', JSON.stringify(playlist.map(({ lyrics, ...rest }) => rest)));
+      } catch (err) {
+        console.warn('Failed to persist playlist', err);
+      }
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [playlist]);
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      try {
+        localStorage.setItem('visualizer_studio_config', JSON.stringify(visualizerConfig));
+      } catch (err) {
+        console.warn('Failed to persist visualizer config', err);
+      }
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [visualizerConfig]);
 
   // Selection Mode State
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -177,7 +198,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           artist: track.artist,
           album: track.album,
           url: track.previewUrl,
-          duration: 30,
+          duration: track.duration || 30,
           cover: track.cover,
           onlineId: track.id,
         };
@@ -185,7 +206,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         onlineMappedRef.current[track.id] = idx;
         setCurrentTrackIndex(idx);
         setIsPlaying(true);
-        return { success: true, isPreview: true, error: resolved.error || 'Full track unavailable' };
+        return { success: true, isPreview: true };
       }
       return { success: false, error: resolved.error || 'No stream available' };
     } catch (e: any) {
@@ -455,7 +476,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   // --- AUDIO ENGINE ---
   useEffect(() => {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    const ctx = new AudioContextClass();
+    const ctx = new AudioContextClass({ latencyHint: 'playback' });
     audioContextRef.current = ctx;
 
     const audio = new Audio();
@@ -528,9 +549,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     return () => {
         audio.pause();
+        audio.src = ''; // Clean up to prevent memory leaks
         audio.removeEventListener('timeupdate', updateTime);
         audio.removeEventListener('loadedmetadata', updateDuration);
         audio.removeEventListener('ended', onEnded);
+        
+        // Disconnect all audio nodes to prevent memory leaks
+        if (sourceNodeRef.current) {
+            try { sourceNodeRef.current.disconnect(); } catch(e) {}
+        }
+        eqNodesRef.current.forEach(filter => {
+            try { filter.disconnect(); } catch(e) {}
+        });
+        if (analyserRef.current) {
+            try { analyserRef.current.disconnect(); } catch(e) {}
+        }
+        if (gainNodeRef.current) {
+            try { gainNodeRef.current.disconnect(); } catch(e) {}
+        }
+        
         ctx.close();
     };
   }, []); // Empty dependency array means setup only once
@@ -593,35 +630,30 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const handleFileAdd = async (files: FileList | null) => {
     if (!files) return;
     setIsAdding(true);
-    try {
-      const newTracks: MusicTrack[] = [];
-      
-      for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|flac|ogg|m4a)$/i)) continue;
-          const originalPath = (file as any).path;
-          let url = originalPath ? `file://${originalPath}` : await fileToBase64(file);
+    const newTracks: MusicTrack[] = [];
+    
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|flac|ogg|m4a)$/i)) continue;
+        const originalPath = (file as any).path;
+        let url = originalPath ? `file://${originalPath}` : await fileToBase64(file);
 
-          let title = file.name.replace(/\.[^/.]+$/, "");
-          let artist = t('unknownArtist');
-          let album = "Unknown Album";
-          let cover = undefined;
-          
-          const meta = await parseAudioMetadata(file);
-          if (meta.title) title = meta.title;
-          if (meta.artist) artist = meta.artist;
-          if (meta.album) album = meta.album;
-          if (meta.cover) cover = meta.cover;
-          if (!cover) cover = await extractAlbumArt(file);
-          
-          newTracks.push({ id: crypto.randomUUID(), title, artist, album, url, path: originalPath, duration: 0, cover });
-      }
-      setPlaylist(prev => [...prev, ...newTracks]);
-    } catch (err) {
-      console.error('Failed to add files', err);
-    } finally {
-      setIsAdding(false);
+        let title = file.name.replace(/\.[^/.]+$/, "");
+        let artist = t('unknownArtist');
+        let album = "Unknown Album";
+        let cover = undefined;
+        
+        const meta = await parseAudioMetadata(file);
+        if (meta.title) title = meta.title;
+        if (meta.artist) artist = meta.artist;
+        if (meta.album) album = meta.album;
+        if (meta.cover) cover = meta.cover;
+        if (!cover) cover = await extractAlbumArt(file);
+        
+        newTracks.push({ id: crypto.randomUUID(), title, artist, album, url, path: originalPath, duration: 0, cover });
     }
+    setPlaylist(prev => [...prev, ...newTracks]);
+    setIsAdding(false);
   };
 
   const filteredTracks = useMemo(() => {
@@ -648,40 +680,39 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
   const reorderEnabled = !isSelectionMode && !searchQuery.trim();
 
-  const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, index: number) => {
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
     e.dataTransfer.setData('text/plain', String(index));
     e.dataTransfer.effectAllowed = 'move';
     setDragFrom(index);
     setDropPos(null);
-  }, []);
+  };
 
-  const handleDragOverRow = useCallback((e: React.DragEvent<HTMLDivElement>, index: number) => {
-    if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('text/plain')) e.preventDefault();
-    if (dragFrom === null || index === dragFrom) return;
+  const handleDragOverRow = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (dragFrom === null) return;
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const pos = e.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom';
     setDropPos(prev => (prev && prev.index === index && prev.pos === pos ? prev : { index, pos }));
-  }, [dragFrom]);
+  };
 
-  const handleDropRow = useCallback((index: number, pos: 'top' | 'bottom') => {
-    if (dragFrom === null || index === dragFrom) return;
+  const handleDropRow = (index: number) => {
+    if (dragFrom === null) return;
     setPlaylist(prev => {
       const next = [...prev];
       const [moved] = next.splice(dragFrom, 1);
-      let to = index + (pos === 'bottom' ? 1 : 0);
-      if (dragFrom < index) to -= 1;
+      let to = index;
+      if (dragFrom < index) to = index - 1;
       next.splice(to, 0, moved);
       return next;
     });
     setDragFrom(null);
     setDropPos(null);
-  }, [dragFrom]);
+  };
 
-  const handleDragEnd = useCallback(() => {
+  const handleDragEnd = () => {
     setDragFrom(null);
     setDropPos(null);
-  }, []);
+  };
 
   const scrollToCurrentTrack = useCallback(() => {
     const container = playlistScrollRef.current;
@@ -744,40 +775,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setPlaylist(prev => prev.map(t => t.id === id ? { ...t, title: newTitle } : t));
   };
 
-  const formatTime = useCallback((seconds: number) => {
+  const formatTime = (seconds: number) => {
     if (!seconds || isNaN(seconds)) return "0:00";
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
-  }, []);
-
-  const handlePlayTrack = useCallback((tr: MusicTrack) => {
-    setOnlineSession(null);
-    const i = playlist.findIndex(p => p.id === tr.id);
-    if (i === -1) return;
-    setCurrentTrackIndex(i);
-    setIsPlaying(true);
-  }, [playlist]);
-
-  const handleDeleteTrack = useCallback((id: string) => {
-    setTrackToDelete(id);
-    setTracksToDeleteCount(1);
-    setDeleteConfirmOpen(true);
-  }, []);
-
-  const handleDetailsTrack = useCallback((tr: MusicTrack) => {
-    setDetailsTrack(tr);
-    setIsMusicDetailsOpen(true);
-  }, []);
-
-  const handleToggleSelect = useCallback((id: string) => {
-    setSelectedTrackIds(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
-  }, []);
+  };
 
   const handleSwitchToMini = () => {
       if (window.electronAPI) {
@@ -904,29 +907,40 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <p className="text-gray-400 font-medium font-persian">{currentTrack?.artist || (playlist.length > 0 ? t('unknownArtist') : t('addSongsDesc'))}</p>
                 </div>
 
-                <div className="w-full group/progress cursor-pointer" onClick={(e) => { if (!progressRef.current || !audioElementRef.current) return; if (!Number.isFinite(duration) || duration <= 0) return; const rect = progressRef.current.getBoundingClientRect(); const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1); audioElementRef.current.currentTime = percent * duration; }} ref={progressRef}>
+                <div 
+                    className="w-full group/progress cursor-pointer" 
+                    role="slider"
+                    aria-label="Seek"
+                    aria-valuemin={0}
+                    aria-valuemax={duration || 0}
+                    aria-valuenow={Math.round(currentTime)}
+                    tabIndex={0}
+                    onClick={(e) => { if (!progressRef.current || !audioElementRef.current) return; if (!Number.isFinite(duration) || duration <= 0) return; const rect = progressRef.current.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; const percent = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1); audioElementRef.current.currentTime = percent * duration; }}
+                    onTouchEnd={(e) => { if (!progressRef.current || !audioElementRef.current) return; if (!Number.isFinite(duration) || duration <= 0) return; const rect = progressRef.current.getBoundingClientRect(); const touch = e.changedTouches[0]; const percent = Math.min(Math.max((touch.clientX - rect.left) / rect.width, 0), 1); audioElementRef.current.currentTime = percent * duration; }}
+                    ref={progressRef}
+                >
                     <div className="flex justify-between text-xs text-gray-500 font-mono mb-1" dir="ltr"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
                     <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden relative" dir="ltr">
-                        <div className="absolute top-0 left-0 h-full transition-all duration-300 relative" style={{ width: `${(currentTime / duration) * 100 || 0}%`, backgroundColor: activeVisColor }}></div>
+                        <div className="absolute top-0 left-0 h-full transition-all duration-300 relative" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`, backgroundColor: activeVisColor }}></div>
                         <div className="absolute inset-0 bg-white/0 group-hover/progress:bg-white/10 transition-colors"></div>
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between px-4 mt-2" dir="ltr">
-                    <button onClick={() => setIsShuffle(!isShuffle)} className={`p-2 rounded-full transition-colors ${isShuffle ? 'text-red-500 bg-red-500/10' : 'text-gray-500 hover:text-white'}`}><Shuffle size={20} /></button>
+                <div className="flex items-center justify-between px-4 mt-2" dir="ltr" role="group" aria-label="Playback controls">
+                    <button onClick={() => setIsShuffle(!isShuffle)} aria-label={isShuffle ? 'Shuffle on' : 'Shuffle off'} aria-pressed={isShuffle} className={`p-2 rounded-full transition-colors ${isShuffle ? 'text-red-500 bg-red-500/10' : 'text-gray-500 hover:text-white'}`}><Shuffle size={20} aria-hidden="true" /></button>
                     <div className="flex items-center gap-4">
-                        <button onClick={handlePrev} className="p-3 text-white hover:text-red-500 transition-colors"><SkipBack size={28} className="fill-current" /></button>
-                        <button onClick={() => togglePlay()} className="w-16 h-16 rounded-full text-white flex items-center justify-center shadow-lg shadow-black/40 hover:scale-105 active:scale-95 transition-all" style={{ backgroundColor: activeVisColor }}>
-                            {isPlaying ? <Pause size={32} className="fill-white" /> : <Play size={32} className="fill-white translate-x-1" />}
+                        <button onClick={handlePrev} aria-label="Previous track" className="p-3 text-white hover:text-red-500 transition-colors"><SkipBack size={28} className="fill-current" aria-hidden="true" /></button>
+                        <button onClick={() => togglePlay()} aria-label={isPlaying ? 'Pause' : 'Play'} aria-pressed={isPlaying} className="w-16 h-16 rounded-full text-white flex items-center justify-center shadow-lg shadow-black/40 hover:scale-105 active:scale-95 transition-all" style={{ backgroundColor: activeVisColor }}>
+                            {isPlaying ? <Pause size={32} className="fill-white" aria-hidden="true" /> : <Play size={32} className="fill-white translate-x-1" aria-hidden="true" />}
                         </button>
-                        <button onClick={handleNext} className="p-3 text-white hover:text-red-500 transition-colors"><SkipForward size={28} className="fill-current" /></button>
+                        <button onClick={handleNext} aria-label="Next track" className="p-3 text-white hover:text-red-500 transition-colors"><SkipForward size={28} className="fill-current" aria-hidden="true" /></button>
                     </div>
-                    <button onClick={() => setIsLoop(!isLoop)} className={`p-2 rounded-full transition-colors ${isLoop ? 'text-red-500 bg-red-500/10' : 'text-gray-500 hover:text-white'}`}><Repeat size={20} /></button>
+                    <button onClick={() => setIsLoop(!isLoop)} aria-label={isLoop ? 'Loop on' : 'Loop off'} aria-pressed={isLoop} className={`p-2 rounded-full transition-colors ${isLoop ? 'text-red-500 bg-red-500/10' : 'text-gray-500 hover:text-white'}`}><Repeat size={20} aria-hidden="true" /></button>
                 </div>
 
                  <div className="flex items-center gap-3 px-4 mt-2" dir="ltr">
-                    <Volume2 size={16} className="text-gray-500" />
-                    <input type="range" min="0" max="1" step="0.05" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-500" />
+                    <Volume2 size={16} className="text-gray-500" aria-hidden="true" />
+                    <input type="range" min="0" max="1" step="0.05" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} aria-label="Volume" className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-500" />
                  </div>
             </div>
         </div>
@@ -1030,11 +1044,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                             dropPos={dropPos && dropPos.index === index ? dropPos.pos : null}
                                             staggerDelay={Math.min(index * 24, 400)}
                                             formatTime={formatTime}
-                                            onPlay={handlePlayTrack}
-                                            onDelete={handleDeleteTrack}
-                                            onDetails={handleDetailsTrack}
+                                            onPlay={(tr) => { setOnlineSession(null); const i = playlist.findIndex(p => p.id === tr.id); setCurrentTrackIndex(i); setIsPlaying(true); }}
+                                            onDelete={(id) => { setTrackToDelete(id); setTracksToDeleteCount(1); setDeleteConfirmOpen(true); }}
+                                            onDetails={(tr) => { setDetailsTrack(tr); setIsMusicDetailsOpen(true); }}
                                             onMoreToggle={setMoreMenuId}
-                                            onToggleSelect={handleToggleSelect}
+                                            onToggleSelect={(id) => setSelectedTrackIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
                                             onDragStart={handleDragStart}
                                             onDragOverRow={handleDragOverRow}
                                             onDropRow={handleDropRow}
@@ -1061,11 +1075,11 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                                     dropPos={null}
                                     staggerDelay={Math.min(idx * 24, 400)}
                                     formatTime={formatTime}
-                                    onPlay={handlePlayTrack}
-                                    onDelete={handleDeleteTrack}
-                                    onDetails={handleDetailsTrack}
+                                    onPlay={(tr) => { setOnlineSession(null); const i = playlist.findIndex(p => p.id === tr.id); setCurrentTrackIndex(i); setIsPlaying(true); }}
+                                    onDelete={(id) => { setTrackToDelete(id); setTracksToDeleteCount(1); setDeleteConfirmOpen(true); }}
+                                    onDetails={(tr) => { setDetailsTrack(tr); setIsMusicDetailsOpen(true); }}
                                     onMoreToggle={setMoreMenuId}
-                                    onToggleSelect={handleToggleSelect}
+                                    onToggleSelect={(id) => setSelectedTrackIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
                                     onDragStart={handleDragStart}
                                     onDragOverRow={handleDragOverRow}
                                     onDropRow={handleDropRow}

@@ -161,6 +161,7 @@ body {
   overflow: hidden; /* App-like feel */
   font-family: 'Inter', 'Vazirmatn', sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Custom Utilities */
@@ -168,19 +169,39 @@ body {
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 
+/* Better focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+button:focus-visible, input:focus-visible, [role="button"]:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+/* Remove focus outline for mouse users */
+button:focus:not(:focus-visible), input:focus:not(:focus-visible), [role="button"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: #0a0a0a; 
 }
 ::-webkit-scrollbar-thumb {
   background: #333; 
-  border-radius: 4px;
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #ef4444; 
+}
+::-webkit-scrollbar-corner {
+  background: #0a0a0a;
 }
 
 /* Loading Screen Keyframes */
@@ -294,8 +315,8 @@ body {
 
 /* --- Page Transitions --- */
 :root {
-  --page-exit-ms: 160ms;
-  --page-enter-ms: 640ms;
+  --page-exit-ms: 120ms;
+  --page-enter-ms: 300ms;
   --page-in-x: 32px;
   --page-out-x: -32px;
   --page-stagger-gap: 25ms;
@@ -566,10 +587,71 @@ body {
   .animate-modal-out {
     animation: none !important;
   }
+  /* Disable all common animations */
+  .animate-fade-in,
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce,
+  .animate-ping,
+  .animate-shimmer,
+  .animate-pulse-slow,
+  .animate-ring-spin,
+  .animate-halo-breathe,
+  .animate-halo-spin-slow,
+  .animate-particle-rise,
+  .animate-phrase-in,
+  .animate-exit-flash,
+  .animate-wave,
+  .animate-eq-bar,
+  .animate-lyric-shimmer,
+  .animate-lyric-glow-pulse {
+    animation: none !important;
+  }
+  /* Disable transitions */
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
+
+/* motion-off class for low power mode */
 .motion-off .page-exit, .motion-off .page-enter, .motion-off .page-enter .page-stagger > *,
 .motion-off .page-glow-sweep::before, .motion-off .page-indicator, .motion-off .tab-active {
   animation: none !important;
 }
 .motion-off .page-exit { opacity: 0; transform: none; }
 .motion-off .page-enter { opacity: 1; transform: none; }
+.motion-off .animate-fade-in,
+.motion-off .animate-pulse,
+.motion-off .animate-spin,
+.motion-off .animate-bounce,
+.motion-off .animate-ping,
+.motion-off .animate-shimmer,
+.motion-off .animate-pulse-slow,
+.motion-off .animate-ring-spin,
+.motion-off .animate-halo-breathe,
+.motion-off .animate-halo-spin-slow,
+.motion-off .animate-particle-rise,
+.motion-off .animate-phrase-in,
+.motion-off .animate-exit-flash,
+.motion-off .animate-wave,
+.motion-off .animate-eq-bar,
+.motion-off .animate-lyric-shimmer,
+.motion-off .animate-lyric-glow-pulse,
+.motion-off .eq-bar,
+.motion-off .track-enter,
+.motion-off .animate-glow-breathe,
+.motion-off .eq-scan,
+.motion-off .eq-column-in,
+.motion-off .animate-slide-up,
+.motion-off .animate-modal-out {
+  animation: none !important;
+}
+.motion-off *,
+.motion-off *::before,
+.motion-off *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+}

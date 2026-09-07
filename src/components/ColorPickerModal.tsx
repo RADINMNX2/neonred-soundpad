@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check, Pipette } from 'lucide-react';
 import { isValidHexColor } from '../utils/colorUtils';
+import { useEscapeKey } from '../utils/useEscapeKey';
 
 interface ColorPickerModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ const NEON_PRESETS = [
 ];
 
 const ColorPickerModal: React.FC<ColorPickerModalProps> = ({ isOpen, onClose, currentColor, onSelect, title = "Color Architect" }) => {
+  useEscapeKey(isOpen, onClose);
   const [hex, setHex] = useState(currentColor);
   const [hue, setHue] = useState(0);
   const [saturation, setSaturation] = useState(100);

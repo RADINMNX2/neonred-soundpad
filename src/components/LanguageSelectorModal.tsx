@@ -1,6 +1,7 @@
 import React from 'react';
 import { Globe, Check, Sparkles, Settings } from 'lucide-react';
 import { Language } from '../utils/translations';
+import { useEscapeKey } from '../utils/useEscapeKey';
 
 interface LanguageSelectorModalProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface LanguageSelectorModalProps {
 }
 
 const LanguageSelectorModal: React.FC<LanguageSelectorModalProps> = ({ isOpen, onSelect }) => {
+  useEscapeKey(isOpen, () => {}); // Language selection is mandatory, Escape does nothing
   if (!isOpen) return null;
 
   return (
