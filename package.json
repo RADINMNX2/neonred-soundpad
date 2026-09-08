@@ -1,6 +1,6 @@
 {
   "name": "neonred-soundpad",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "description": "A high-performance, modern soundboard for Windows with mic injection and real-time EQ.",
   "main": "main.js",
   "homepage": ".",

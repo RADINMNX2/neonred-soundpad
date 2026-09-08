@@ -65,6 +65,48 @@ const EMPTY_LAYOUT: VirtualLayout = {
   searchCount: 0,
 };
 
+// --- Static per-song waveform for the seek bar (decoded once, never realtime) ---
+const WAVE_BUCKETS = 80;
+
+const hashString = (s: string) => {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
+
+const mulberry32 = (seed: number) => {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+// Deterministic pseudo-waveform keyed by the track id — identical across sessions,
+// used when the real audio can't be decoded (online sources, oversized files).
+const seededWaveform = (seedStr: string): number[] => {
+  const rand = mulberry32(hashString(seedStr));
+  const peaks = new Array(WAVE_BUCKETS).fill(0);
+  let phase = 0;
+  for (let i = 0; i < WAVE_BUCKETS; i++) {
+    phase += 0.35 + rand() * 1.1;
+    const wrap = rand() > 0.72 ? 1.6 : 0.55;
+    const env = 1 - Math.abs(i - WAVE_BUCKETS / 2) / (WAVE_BUCKETS / 2);
+    peaks[i] = (0.35 + 0.65 * rand()) * (Math.abs(Math.sin(phase)) * 0.55 + 0.45) * (0.2 + 0.8 * env) * wrap;
+  }
+  for (let i = 1; i < WAVE_BUCKETS - 1; i++) {
+    peaks[i] = (peaks[i - 1] + peaks[i] * 2 + peaks[i + 1]) / 4;
+  }
+  const max = Math.max(...peaks, 1e-9);
+  return peaks.map(v => Math.min(1, Math.max(0.08, (v / max) * 0.95)));
+};
+
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
   monitorDeviceId, 
   masterVolume,
@@ -583,6 +625,77 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }
   }, [currentTrack]);
 
+  // --- STATIC per-song waveform for the seek bar ---
+  const [waveformData, setWaveformData] = useState<number[] | null>(null);
+  const [audioCtxReady, setAudioCtxReady] = useState(false);
+  const waveformCacheRef = useRef<Map<string, number[]>>(new Map());
+
+  const computeWaveform = useCallback(async (track: MusicTrack, ctx: AudioContext): Promise<number[] | null> => {
+    try {
+      let buf: ArrayBuffer | null = null;
+      if (track.path && window.electronAPI?.readAudioBytes) {
+        const res = await window.electronAPI.readAudioBytes(track.path);
+        if (res && res.success && res.bytes) {
+          const bytes = res.bytes;
+          buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        }
+      } else if (track.url) {
+        const r = await fetch(track.url);
+        if (r.ok) buf = await r.arrayBuffer();
+      }
+      if (!buf || buf.byteLength < 4096) return null;
+      const audioBuf = await ctx.decodeAudioData(buf);
+      const data = audioBuf.getChannelData(0);
+      const segment = Math.floor(data.length / WAVE_BUCKETS);
+      if (segment < 1) return null;
+      const out = new Array<number>(WAVE_BUCKETS).fill(0);
+      for (let i = 0; i < WAVE_BUCKETS; i++) {
+        let mx = 0, mn = 0;
+        const s = i * segment;
+        for (let j = 0; j < segment; j++) {
+          const v = data[s + j];
+          if (v > mx) mx = v;
+          if (v < mn) mn = v;
+        }
+        out[i] = mx - mn;
+      }
+      const sorted = [...out].sort((a, b) => a - b);
+      const p95 = sorted[Math.floor(sorted.length * 0.95)] || 1e-9;
+      return out.map(v => Math.min(1, Math.pow(Math.max(0.03, v / p95), 0.7)));
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  // Load (or resolve from cache) the waveform whenever the current track changes.
+  const waveformEffectRef = useRef<number>(0); // guard against stale async results
+  useEffect(() => {
+    const track = currentTrack;
+    const guard = ++waveformEffectRef.current;
+    if (!track) {
+      setWaveformData(null);
+      return;
+    }
+    const key = track.id ?? track.path ?? track.url ?? 'none';
+    const cached = waveformCacheRef.current.get(key);
+    if (cached) {
+      setWaveformData(cached);
+      return;
+    }
+    setWaveformData(null);
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+    computeWaveform(track, ctx)
+      .then((w) => {
+        const shape = w || seededWaveform(String(key));
+        if (w) waveformCacheRef.current.set(key, shape);
+        if (guard === waveformEffectRef.current) setWaveformData(shape);
+      })
+      .catch(() => {
+        if (guard === waveformEffectRef.current) setWaveformData(seededWaveform(String(key)));
+      });
+  }, [currentTrack, computeWaveform, audioCtxReady]);
+
   // --- LYRICS (embedded USLT + sidecar .lrc) ---
   const [lyricsOpen, setLyricsOpen] = useState(false);
   const [lyricsEverOpen, setLyricsEverOpen] = useState(false);
@@ -754,6 +867,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     const ctx = new AudioContextClass({ latencyHint: 'playback' });
     audioContextRef.current = ctx;
+    setAudioCtxReady(true);
 
     const audio = new Audio();
     audioElementRef.current = audio;
@@ -1367,10 +1481,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 <div className="w-full">
                     <div className="flex justify-between text-xs text-gray-500 font-mono mb-1" dir="ltr"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
                     <VisualizerSeekBar
-                        analyser={analyserRef.current}
-                        isPlaying={isPlaying}
+                        waveform={waveformData}
                         color={activeVisColor}
-                        config={visualizerConfig}
                         currentTime={currentTime}
                         duration={duration}
                         trackKey={currentTrack?.id ?? 'none'}

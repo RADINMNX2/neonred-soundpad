@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, PartyPopper, PlusCircle, CheckCircle2, MinusCircle } from 'lucide-react';
+import { X, PartyPopper, PlusCircle, CheckCircle2, MinusCircle, RefreshCw } from 'lucide-react';
 import { CHANGELOG } from '../data/changelog';
 import { VERSION } from '../constants';
 import { useLanguage } from '../context/LanguageContext';
@@ -15,7 +15,7 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose }) => {
   const { t, isRTL, language } = useLanguage();
   const currentRelease = CHANGELOG.find(c => c.version === VERSION) || CHANGELOG[0];
   const useFa = language === 'fa' && !!currentRelease.featuresFa;
-  const itemsFor = (key: 'added' | 'fixed' | 'removed') => {
+  const itemsFor = (key: 'added' | 'changed' | 'fixed' | 'removed') => {
     if (useFa) {
       const faItems = currentRelease.featuresFa?.[key];
       if (faItems && faItems.length > 0) return faItems;
@@ -41,6 +41,15 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({ isOpen, onClose }) => {
       iconColor: 'text-blue-400',
       dot: 'bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.7)]',
       items: itemsFor('fixed'),
+    },
+    {
+      key: 'changed' as const,
+      label: t('whatsNewChanged'),
+      icon: RefreshCw,
+      chip: 'bg-gradient-to-r from-amber-500/15 to-orange-500/15 border-amber-500/30 text-amber-300',
+      iconColor: 'text-amber-400',
+      dot: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.7)]',
+      items: itemsFor('changed'),
     },
     {
       key: 'removed' as const,

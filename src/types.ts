@@ -241,9 +241,11 @@ declare global {
       pickMusicFolders: () => Promise<{ cancelled: boolean; paths: string[]; error?: string }>;
       scanLibrary: (folders: string[]) => void;
       filterMissingTracks: (paths: string[]) => Promise<{ missing: string[] }>;
-      readTrackMeta: (path: string) => Promise<{
-        title?: string; artist?: string; album?: string; duration?: number; cover?: string; lyrics?: string;
+readTrackMeta: (path: string) => Promise<{
+        title?: string; artist?: string; album?: string; duration?: number; cover?: string; 
+lyrics?: string;
       } | null>;
+      readAudioBytes: (path: string) => Promise<{ success: boolean; bytes?: Uint8Array; tooLarge?: boolean } | null>;
       onLibraryScanChunk: (callback: (payload: { paths: string[]; found: number; elapsedMs: number }) => void) => () => void;
       onLibraryScanComplete: (callback: (payload: { total: number; elapsedMs: number }) => void) => () => void;
       onLibraryScanError: (callback: (payload: { error: string }) => void) => () => void;

@@ -4,17 +4,33 @@ export interface ChangelogEntry {
   date: string;
   features: {
     added?: string[];
+    changed?: string[];
     fixed?: string[];
     removed?: string[];
   };
   featuresFa?: {
     added?: string[];
+    changed?: string[];
     fixed?: string[];
     removed?: string[];
   };
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "2.6.2",
+    date: "2026-09-08",
+    features: {
+      changed: [
+        "Waveform seek bar is now static and per-song — it decodes each track's actual audio once into its own fixed shape (no more realtime dancing bars). Songs morph into each other with a smooth fade and a shimmer sweep on track change, and the played part still glows in your visualizer color.",
+      ]
+    },
+    featuresFa: {
+      changed: [
+        "نوار سیـک حالا ثابت و مخصوص هر آهنگه — شکل هر ترک یک‌بار از خوده فایل صوتی decode میشه و ثابت می‌مونه (دیگه مثل قبل به صدای زنده واکنش نشون نمی‌ده). وقتی آهنگ عوض میشه، شکل قبلی به شکلی ملایم به شکل جدید تبدیل میشه و بخش پخش‌شده هم با رنگ ویژوالایزر شما درخشش می‌کنه.",
+      ]
+    }
+  },
   {
     version: "2.6.1",
     date: "2026-09-08",

@@ -641,6 +641,24 @@ const LIBRARY_AUDIO_EXTS = new Map([
 ]);
 let libraryScanActive = false;
 
+const WAVEFORM_MAX_BYTES = 60 * 1024 * 1024; // cap — huge lossless files fall back to a seeded shape
+
+// Raw audio bytes for waveform decoding in the renderer (Web Audio). Cap size to avoid OOM.
+ipcMain.handle('library:read-audio-bytes', async (event, filePath) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') return { success: false };
+    const ext = path.extname(filePath).toLowerCase();
+    if (!LIBRARY_AUDIO_EXTS.has(ext)) return { success: false };
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile()) return { success: false };
+    if (stat.size > WAVEFORM_MAX_BYTES) return { success: false, tooLarge: true };
+    const buf = await fs.promises.readFile(filePath);
+    return { success: true, bytes: buf };
+  } catch (e) {
+    return { success: false };
+  }
+});
+
 // Read full audio metadata (title/artist/album/cover/duration/lyrics) in the main process —
 // reliable for local file paths without depending on renderer fetch(file://) or external CDNs.
 ipcMain.handle('library:read-meta', async (event, filePath) => {
