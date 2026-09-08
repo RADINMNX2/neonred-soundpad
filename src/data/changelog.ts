@@ -18,6 +18,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.6.3",
+    date: "2026-09-08",
+    features: {
+      fixed: [
+        "Fixed the music page crashing to a black screen the moment you play a song — the new per-track waveform decoder could run out of memory on large audio files. Decoding now stops safely and the seek bar falls back to a clean static waveform.",
+      ]
+    },
+    featuresFa: {
+      fixed: [
+        "رفع کرش صفحهٔ موزیک به صفحهٔ سیاه همون لحظه که آهنگ پخش می‌شه — دیکودر ویوفرم جدید روی فایل‌های صوتی بزرگ می‌تونست حافظه رو تموم کنه. حالا دیکود به‌شکل امن متوقف میشه و نوار سیک به یه ویوفرم ثابت تمیز برمی‌گرده.",
+      ]
+    }
+  },
+  {
     version: "2.6.2",
     date: "2026-09-08",
     features: {

@@ -641,7 +641,7 @@ const LIBRARY_AUDIO_EXTS = new Map([
 ]);
 let libraryScanActive = false;
 
-const WAVEFORM_MAX_BYTES = 60 * 1024 * 1024; // cap — huge lossless files fall back to a seeded shape
+const WAVEFORM_MAX_BYTES = 12 * 1024 * 1024; // safe cap — large lossless files fall back to a seeded shape
 
 // Raw audio bytes for waveform decoding in the renderer (Web Audio). Cap size to avoid OOM.
 ipcMain.handle('library:read-audio-bytes', async (event, filePath) => {

@@ -629,6 +629,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const [waveformData, setWaveformData] = useState<number[] | null>(null);
   const [audioCtxReady, setAudioCtxReady] = useState(false);
   const waveformCacheRef = useRef<Map<string, number[]>>(new Map());
+  const waveDecodeFailedRef = useRef(false); // disable decode after first OOM/crash
 
   const computeWaveform = useCallback(async (track: MusicTrack, ctx: AudioContext): Promise<number[] | null> => {
     try {
@@ -644,7 +645,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (r.ok) buf = await r.arrayBuffer();
       }
       if (!buf || buf.byteLength < 4096) return null;
-      const audioBuf = await ctx.decodeAudioData(buf);
+      // Hard cap in renderer: anything over 8MB is likely too large to decode safely.
+      if (buf.byteLength > 8 * 1024 * 1024) return null;
+      const decodePromise = ctx.decodeAudioData(buf);
+      const timeoutPromise = new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error('decode timeout')), 8000)
+      );
+      const audioBuf = await Promise.race([decodePromise, timeoutPromise]) as AudioBuffer | null;
+      if (!audioBuf) return null;
       const data = audioBuf.getChannelData(0);
       const segment = Math.floor(data.length / WAVE_BUCKETS);
       if (segment < 1) return null;
@@ -684,7 +692,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }
     setWaveformData(null);
     const ctx = audioContextRef.current;
-    if (!ctx) return;
+    if (!ctx || waveDecodeFailedRef.current) {
+      setWaveformData(seededWaveform(String(key)));
+      return;
+    }
     computeWaveform(track, ctx)
       .then((w) => {
         const shape = w || seededWaveform(String(key));
@@ -692,6 +703,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (guard === waveformEffectRef.current) setWaveformData(shape);
       })
       .catch(() => {
+        waveDecodeFailedRef.current = true;
         if (guard === waveformEffectRef.current) setWaveformData(seededWaveform(String(key)));
       });
   }, [currentTrack, computeWaveform, audioCtxReady]);
