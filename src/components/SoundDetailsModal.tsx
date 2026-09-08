@@ -118,6 +118,13 @@ const SoundDetailsModal: React.FC<SoundDetailsModalProps> = ({
               <div className="flex items-start justify-between mb-4">
                   <div className="flex-1 min-w-0">
                       <h2 className="text-2xl font-bold text-white leading-tight font-persian truncate">{sound.name}</h2>
+                      {(sound.artist || sound.album || sound.title) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              {sound.title && sound.title !== sound.name && <span className="text-xs text-gray-300 font-persian truncate">{sound.title}</span>}
+                              {sound.artist && <span className="text-xs text-gray-500 font-persian">{sound.artist}</span>}
+                              {sound.album && <span className="text-xs text-gray-500 font-persian">• {sound.album}</span>}
+                          </div>
+                      )}
                       <div className="flex items-center gap-2 mt-2">
                           {sound.shortcut ? (
                               <span className="px-2 py-1 bg-white/10 rounded-md text-xs font-mono text-red-400 border border-red-500/20 flex items-center gap-1">

@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback, createRef } from 'react';
-import { Upload, VolumeX, Search, Mic, MicOff, Headphones, Trash2, X, StopCircle, MousePointer2, Plus } from 'lucide-react';
+import { Upload, VolumeX, Search, Mic, MicOff, Headphones, Trash2, X, StopCircle, MousePointer2, Plus, ListChecks } from 'lucide-react';
 import { SoundEffect, ExtendedAudioElement, GlobalShortcut, MicEqSettings } from '../types';
 import SoundButton from '../components/SoundButton';
 import RenameModal from '../components/RenameModal';
@@ -69,6 +69,44 @@ const SoundPad: React.FC<SoundPadProps> = ({
       }
     }
   }, [sounds]);
+
+  // Backfill cover + metadata for previously-imported sounds that lost their art
+  // (this fixes covers that failed to extract before, or were dropped from storage).
+  useEffect(() => {
+    if (!window.electronAPI?.readTrackMeta) return;
+    let cancelled = false;
+    (async () => {
+      const pars = sounds.map((s) => {
+        if (!s.path || (s.image && s.title && s.artist)) return Promise.resolve(null);
+        return window.electronAPI.readTrackMeta(s.path).then(async (meta) => {
+          if (cancelled || !meta) return null;
+          let image = s.image;
+          if (!image && meta.cover) {
+            image = await downscaleArtwork(meta.cover);
+          }
+          if (!s.image && !image && !meta.title) return null;
+          return {
+            id: s.id,
+            image,
+            title: s.title || meta.title,
+            artist: s.artist || meta.artist,
+            album: s.album || meta.album,
+            duration: s.duration || meta.duration,
+          };
+        }).catch(() => null);
+      });
+      const results = await Promise.all(pars);
+      if (cancelled) return;
+      const patches = results.filter((r): r is NonNullable<typeof r> => !!r);
+      if (patches.length > 0) {
+        setSounds(prev => prev.map(s => {
+          const p = patches.find(x => x.id === s.id);
+          return p ? { ...s, ...p } : s;
+        }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const [playingIds, setPlayingIds] = useState<Set<string>>(new Set());
   
@@ -212,6 +250,15 @@ const SoundPad: React.FC<SoundPadProps> = ({
         next.add(id);
       }
       return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedSoundIds(prev => {
+      if (prev.size === soundsRef.current.length) {
+        return new Set();
+      }
+      return new Set(soundsRef.current.map(s => s.id));
     });
   }, []);
 
@@ -586,9 +633,7 @@ const SoundPad: React.FC<SoundPadProps> = ({
   }, [isMicMuted, isDeafened, masterVolume, injectorDeviceId]);
 
   // Downscale artwork data URL to max 256x256 to avoid blowing localStorage quota
-  const getCappedArtwork = async (file: File): Promise<string | undefined> => {
-    const art = await extractAlbumArt(file);
-    if (!art) return undefined;
+  const downscaleArtwork = async (art: string): Promise<string | undefined> => {
     try {
       const img = new Image();
       await new Promise<void>((resolve, reject) => {
@@ -617,6 +662,40 @@ const SoundPad: React.FC<SoundPadProps> = ({
     }
   };
 
+  // Extract cover + metadata, preferring the main-process music-metadata reader
+  // (far more reliable than renderer jsmediatags for FLAC/OGG/M4A), falling back
+  // to jsmediatags / video frame capture.
+  const getCappedArtwork = async (file: File, filePath?: string): Promise<{
+    image?: string; title?: string; artist?: string; album?: string; duration?: number;
+  }> => {
+    let meta: { title?: string; artist?: string; album?: string; duration?: number } = {};
+    let art: string | undefined;
+
+    if (filePath && window.electronAPI?.readTrackMeta) {
+      try {
+        const result = await window.electronAPI.readTrackMeta(filePath);
+        if (result) {
+          meta = {
+            title: result.title,
+            artist: result.artist,
+            album: result.album,
+            duration: result.duration,
+          };
+          art = result.cover;
+        }
+      } catch (err) {
+        console.warn("Main-process metadata read failed", err);
+      }
+    }
+
+    if (!art) {
+      art = await extractAlbumArt(file);
+    }
+
+    const image = art ? await downscaleArtwork(art) : undefined;
+    return { ...meta, image };
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
@@ -635,8 +714,8 @@ const SoundPad: React.FC<SoundPadProps> = ({
           url = await fileToBase64(file);
         }
         
-        // Extract album art OR video frame (capped to 256px for persistence)
-        const mediaArt = await getCappedArtwork(file);
+        // Extract album art OR video frame + metadata (capped to 256px for persistence)
+        const mediaMeta = await getCappedArtwork(file, finalPath || undefined);
         
         newSounds.push({
           id: crypto.randomUUID(),
@@ -645,7 +724,11 @@ const SoundPad: React.FC<SoundPadProps> = ({
           path: finalPath || undefined,
           color: 'red',
           volume: 1.0,
-          image: mediaArt,
+          image: mediaMeta.image,
+          title: mediaMeta.title,
+          artist: mediaMeta.artist,
+          album: mediaMeta.album,
+          duration: mediaMeta.duration,
           isFavorite: false
         });
       }
@@ -756,6 +839,13 @@ const SoundPad: React.FC<SoundPadProps> = ({
              {isSelectionMode ? (
                   <div className="flex items-center gap-2 bg-red-900/20 px-2 py-1.5 rounded-xl border border-red-500/30 animate-slide-up">
                      <span className="text-xs font-bold text-red-400 px-2">{selectedSoundIds.size} Selected</span>
+                     <button 
+                       onClick={handleSelectAll}
+                       className="p-2 bg-zinc-800 hover:bg-zinc-700 text-gray-300 rounded-lg transition-all hover:text-white"
+                       title={selectedSoundIds.size === sounds.length ? "Deselect All" : "Select All"}
+                     >
+                        <ListChecks size={18} />
+                     </button>
                      <button 
                        onClick={() => selectedSoundIds.size > 0 && setIsDeleteConfirmOpen(true)}
                        disabled={selectedSoundIds.size === 0}

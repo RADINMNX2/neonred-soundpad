@@ -18,6 +18,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.6.4",
+    date: "2026-09-08",
+    features: {
+      changed: [
+        "SoundPad now reads album art and artist/album/title metadata from the files themselves (via the main process), so imported sounds finally show their real covers instead of blank tiles — and previously-imported sounds get their covers backfilled automatically.",
+        "Select Mode is smarter in both Music Player and SoundPad: a new Select All button picks every track/sound in the current list (and toggles to Deselect All when everything is already selected).",
+      ]
+    },
+    featuresFa: {
+      changed: [
+        "ساندپد حالا کاور آلبوم و متادیتای خواننده/آلبوم/عنوان رو از خوده فایل‌ها می‌خونه (از طریق فرایند اصلی)، پس صداهای ایمپورت‌شده بالاخره کاور واقعی‌شون رو نشون می‌دن به‌جای کاشی خالی — و صداهای قبلی هم خودکار کاورشون برمی‌گرده.",
+        "حالت انتخاب توی هر دو موزیک‌پلیر و ساندپد هوشمندتر شد: دکمهٔ جدید Select All هر آهنگ/صدای لیست فعلی رو انتخاب می‌کنه (و وقتی همه انتخاب شدن به Deselect All تبدیل میشه).",
+      ]
+    }
+  },
+  {
     version: "2.6.3",
     date: "2026-09-08",
     features: {

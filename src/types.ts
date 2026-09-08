@@ -12,6 +12,9 @@ export interface SoundEffect {
   isFavorite?: boolean;
   trimStart?: number;
   trimEnd?: number;
+  title?: string;
+  artist?: string;
+  album?: string;
 }
 
 export interface MusicTrack {

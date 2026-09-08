@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { 
   Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, 
   ListMusic, Music, Volume2, VolumeX, Trash2, Plus, Disc, Sliders, X, MousePointer2, Settings, Shrink, Globe, FileText, Search, XCircle, ChevronUp,
-  Folder, FolderPlus, Library, RefreshCw, HardDrive, Loader2
+  Folder, FolderPlus, Library, RefreshCw, HardDrive, Loader2, ListChecks
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { MusicTrack, ExtendedAudioElement, VisualizerConfig, SpatiflacExtension, OnlineTrack, QualityOption } from '../types';
@@ -1357,6 +1357,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     });
   }, []);
 
+  const handleSelectAllTracks = useCallback(() => {
+    const targets = virtual.rows
+      .filter(r => r.kind === 'track')
+      .map(r => r.track.id);
+    setSelectedTrackIds(prev => {
+      const fullySelected = targets.length > 0 && targets.every(id => prev.has(id));
+      if (fullySelected) return new Set();
+      return new Set(targets);
+    });
+  }, [virtual.rows]);
+
   const handleSwitchToMini = () => {
       if (window.electronAPI) {
           window.electronAPI.switchToMini();
@@ -1534,6 +1545,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     <div className="flex items-center gap-2">
                         {isSelectionMode ? (
                             <div className="flex items-center gap-2 animate-slide-up">
+                                <button onClick={handleSelectAllTracks} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-gray-300 hover:text-white rounded-xl transition-all" title="Select All"><ListChecks size={18} /></button>
                                 <button onClick={handleDeleteSelected} disabled={selectedTrackIds.size === 0} className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50"><Trash2 size={16} />Delete ({selectedTrackIds.size})</button>
                                 <button onClick={() => setIsSelectionMode(false)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-gray-300 rounded-xl transition-all"><X size={16} /></button>
                             </div>

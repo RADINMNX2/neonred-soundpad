@@ -144,6 +144,9 @@ const SoundButton: React.FC<SoundButtonProps> = memo(({
                </span>
              )}
            </div>
+           {sound.artist && (
+             <p className="text-[11px] text-gray-500 truncate mt-0.5 font-persian">{sound.artist}{sound.album ? ` • ${sound.album}` : ''}</p>
+           )}
         </div>
 
         {/* Floating Play Button */}
@@ -173,6 +176,9 @@ const SoundButton: React.FC<SoundButtonProps> = memo(({
     a.shortcut === b.shortcut &&
     a.duration === b.duration &&
     a.image === b.image &&
+    a.title === b.title &&
+    a.artist === b.artist &&
+    a.album === b.album &&
     a.isFavorite === b.isFavorite &&
     a.trimStart === b.trimStart &&
     a.trimEnd === b.trimEnd &&
