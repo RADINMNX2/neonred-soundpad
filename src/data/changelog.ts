@@ -18,6 +18,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.6.5",
+    date: "2026-09-08",
+    features: {
+      fixed: [
+        "Some album covers were still missing on the SoundPad — embedded artwork larger than 1MB was being skipped entirely. Covers are now downscaled in the background process (instead of dropped), so big high-res album art loads too.",
+      ]
+    },
+    featuresFa: {
+      fixed: [
+        "هنوز بعضی کاورها توی ساندپد نمی‌اومدن — کاورهای تعبیه‌شدهٔ بزرگ‌تر از ۱ مگابایت کلاً رد می‌شدن. حالا به‌جای حذف، کاورها توی فرایند پس‌زمینه کوچیک می‌شن، پس کاورهای بزرگ و باکیفیت هم لود می‌شن.",
+      ]
+    }
+  },
+  {
     version: "2.6.4",
     date: "2026-09-08",
     features: {

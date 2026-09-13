@@ -1,5 +1,5 @@
 
-const { app, BrowserWindow, ipcMain, globalShortcut, Tray, screen, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, Tray, screen, dialog, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -513,7 +513,7 @@ ipcMain.handle('save-source-code', async () => {
 ipcMain.handle('save-sound-file', async (event, sourcePath) => {
   try {
     if (!sourcePath || typeof sourcePath !== 'string') throw new Error('Invalid source path');
-    const allowedExtensions = ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.mp4', '.webm', '.m4b', '.aac'];
+    const allowedExtensions = ['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.mp4', '.webm', '.m4b', '.aac', '.opus', '.wma'];
     const extension = path.extname(sourcePath);
     if (!allowedExtensions.includes(extension.toLowerCase())) {
       throw new Error(`Unsupported audio file type: ${extension || 'none'}`);
@@ -659,6 +659,34 @@ ipcMain.handle('library:read-audio-bytes', async (event, filePath) => {
   }
 });
 
+// Downscale embedded cover art to max 512x512 in the main process, so large (or
+// multi-MB) album art still loads instead of being silently dropped. Returns a data URL.
+function coverToDataUrl(picture) {
+  if (!picture || !picture.data || picture.data.length === 0) return undefined;
+  const mime = picture.mimeType || picture.format || 'image/jpeg';
+  const raw = Buffer.from(picture.data);
+  // Small covers: hand back as-is (fast path, keeps original quality).
+  if (raw.length <= 1024 * 1024) {
+    return 'data:' + mime + ';base64,' + raw.toString('base64');
+  }
+  try {
+    const img = nativeImage.createFromBuffer(raw);
+    if (img.isEmpty()) return undefined;
+    const size = img.getSize();
+    const max = 512;
+    let { width, height } = size;
+    const scale = Math.min(1, max / Math.max(width, height));
+    const resized = scale < 1 ? img.resize({ width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)), quality: 'best' }) : img;
+    const jpeg = resized.toJPEG(85);
+    if (jpeg && jpeg.length > 0) {
+      return 'data:image/jpeg;base64,' + jpeg.toString('base64');
+    }
+  } catch (e) {
+    // Fall through: if nativeImage failed, try returning the raw art anyway.
+  }
+  return 'data:' + mime + ';base64,' + raw.toString('base64');
+}
+
 // Read full audio metadata (title/artist/album/cover/duration/lyrics) in the main process —
 // reliable for local file paths without depending on renderer fetch(file://) or external CDNs.
 ipcMain.handle('library:read-meta', async (event, filePath) => {
@@ -672,11 +700,7 @@ ipcMain.handle('library:read-meta', async (event, filePath) => {
     const common = result ? result.common : undefined;
     const format = result ? result.format : undefined;
     const c = common && common.picture && common.picture[0];
-    let cover;
-    if (c && c.data && c.data.length > 0 && c.data.length <= 1024 * 1024) {
-      const mime = c.mimeType || c.format || 'image/jpeg';
-      cover = 'data:' + mime + ';base64,' + Buffer.from(c.data).toString('base64');
-    }
+    const cover = coverToDataUrl(c);
     const lyrics = common && typeof common.lyrics === 'string' ? common.lyrics : undefined;
     return {
       title: common && common.title ? String(common.title) : undefined,
