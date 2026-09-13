@@ -18,6 +18,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.8.0",
+    date: "2026-09-14",
+    features: {
+      changed: [
+        "Title bar redesigned with a modern neon-glass look — a glowing brand mark on the left, a live-pulse system status chip, a sleek segmented navigation with color-glowing active tabs, and refined window controls.",
+        "The Maximize button now shows the real window state (square ⇄ restore) and updates even when maximizing via Win+Up.",
+      ]
+    },
+    featuresFa: {
+      changed: [
+        "نوار عنوان با ظاهر مدرن نئون-شیشه‌ای بازطراحی شد — نشان برند درخشان در چپ، چیپ وضعیت سیستم با پالس زنده، ناوبری سگمنت‌شدهٔ ظریف با تب‌های فعال با درخشش رنگی، و کنترل‌های پنجرهٔ اصلاح‌شده.",
+        "دکمهٔ بزرگ‌نمایی حالا وضعیت واقعی پنجره را نشان می‌دهد (مربع ⇄ بازیابی) و حتی با کلید ترکیبی Win+Up (بزرگ‌نمایی ویندوز) هم به‌درستی به‌روز می‌شود.",
+      ]
+    },
+  },
+  {
     version: "2.7.1",
     date: "2026-09-14",
     features: {

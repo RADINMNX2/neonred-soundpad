@@ -350,6 +350,17 @@ function registerIpcHandlers() {
     }
   });
 
+  const sendWindowState = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window-state-changed', mainWindow.isMaximized());
+    }
+  };
+
+  if (mainWindow) {
+    mainWindow.on('maximize', sendWindowState);
+    mainWindow.on('unmaximize', sendWindowState);
+  }
+
   ipcMain.on('window-close', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.close();

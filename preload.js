@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Tray Actions
   showMainApp: () => ipcRenderer.send('tray-open-app'),
   quitApp: () => ipcRenderer.send('tray-quit-app'),
+
+  // Window State
+  onWindowStateChange: (callback) => {
+    const sub = (_e, isMaximized) => callback(isMaximized);
+    ipcRenderer.on('window-state-changed', sub);
+    return () => ipcRenderer.removeListener('window-state-changed', sub);
+  },
   
   // Shortcuts
   registerShortcuts: (shortcuts) => ipcRenderer.send('register-shortcuts', shortcuts),
