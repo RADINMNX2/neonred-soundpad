@@ -1358,9 +1358,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   }, []);
 
   const handleSelectAllTracks = useCallback(() => {
-    const targets = virtual.rows
-      .filter(r => r.kind === 'track')
-      .map(r => r.track.id);
+    const targets = virtual.rows.flatMap((r): string[] => r.kind === 'track' ? [r.track.id] : []);
     setSelectedTrackIds(prev => {
       const fullySelected = targets.length > 0 && targets.every(id => prev.has(id));
       if (fullySelected) return new Set();

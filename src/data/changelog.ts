@@ -18,6 +18,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.7.0",
+    date: "2026-09-14",
+    features: {
+      changed: [
+        "Development quality gates added: a real `tsc --noEmit` typecheck script (TypeScript bumped 4.9 → 5.9) is now wired into CI, plus the codebase is fully type-clean. No app behavior changes — this is an internal tooling improvement.",
+      ]
+    },
+    featuresFa: {
+      changed: [
+        "گیت‌های کیفیت توسعه اضافه شد: اسکریپت واقعی نوع‌چک `tsc --noEmit` (Typescript از ۴.۹ به ۵.۹ ارتقا یافت) حالا به CI متصل شده، و کل کدبیس بدون خطای نوعیه. تغییر رفتاری در برنامه ایجاد نشده — این یک بهبود داخلی ابزار توسعه است.",
+      ]
+    },
+  },
+  {
     version: "2.6.5",
     date: "2026-09-08",
     features: {

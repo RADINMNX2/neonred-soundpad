@@ -40,6 +40,11 @@ jobs:
       - name: Prepare Source Package (Prebuild)
         run: npm run prebuild
 
+      - name: Typecheck
+        run: npm run typecheck
+        env:
+          CI: true
+
       - name: Build React Application
         run: npm run build
         env:
