@@ -164,6 +164,13 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+html.platform-win32 body {
+  /* On Windows, grayscale AA removes ClearType subpixel rendering and makes
+     small text (9-11px labels, icons) look soft/blurry. Let Chromium use its
+     native subpixel (ClearType) rendering for crisp glyphs and inline SVGs. */
+  -webkit-font-smoothing: auto;
+}
+
 /* Custom Utilities */
 .clip-path-hexagon {
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
@@ -228,7 +235,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), [role="button
 }
 @keyframes phrase-in {
   from { opacity: 0; transform: translateY(10px); filter: blur(4px); }
-  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+  to { opacity: 1; transform: translateY(0); filter: none; }
 }
 @keyframes cursor-blink {
   0%, 49% { opacity: 1; }
@@ -323,7 +330,6 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), [role="button
 .page-shell {
   position: absolute;
   inset: 0;
-  will-change: transform, opacity;
 }
 .page-active {
   opacity: 1;

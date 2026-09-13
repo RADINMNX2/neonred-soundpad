@@ -18,6 +18,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.7.1",
+    date: "2026-09-14",
+    features: {
+      fixed: [
+        "Blurry or pixelated small text and icons on Windows — pages were being kept on permanent GPU layers and re-scaled at fractional DPI (125%/150%), which softened everything. Layers are now only created mid-animation, and on Windows the renderer uses native ClearType subpixel text instead of grayscale anti-aliasing, so small labels and SVG icons look crisp again.",
+      ]
+    },
+    featuresFa: {
+      fixed: [
+        "تار یا پیکسلی شدن متن‌ها و آیکون‌های کوچک در ویندوز — صفحات روی لایه‌های GPU دائمی نگه داشته می‌شدند و در DPI کسری (۱۲۵٪/۱۵۰٪) دوباره بزرگ‌نمایی می‌شدند که همه‌چیز را نرم/تار می‌کرد. حالا لایه‌ها فقط میانهٔ انیمیشن ساخته می‌شوند و در ویندوز رندر متون با ClearType واقعی (subpixel) به‌جای grayscale انجام می‌شود، پس متن‌های کوچک و آیکون‌های SVG دوباره شفاف و تیز می‌شوند.",
+      ]
+    },
+  },
+  {
     version: "2.7.0",
     date: "2026-09-14",
     features: {
