@@ -22,6 +22,15 @@
     <UseStampInf>false</UseStampInf>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup Label="TargetVersionMarkers">
+    <TargetPlatformVersion>10.0</TargetPlatformVersion>
+    <TargetPlatformVersion_NI>9.9</TargetPlatformVersion_NI>
+    <TargetPlatformVersion_CO>9.9</TargetPlatformVersion_CO>
+    <TargetPlatformVersion_FE>9.9</TargetPlatformVersion_FE>
+    <TargetPlatformVersion_MN>9.9</TargetPlatformVersion_MN>
+    <TargetPlatformVersion_VB>9.9</TargetPlatformVersion_VB>
+    <TargetPlatformVersion_GE>9.9</TargetPlatformVersion_GE>
+  </PropertyGroup>
   <Import Project="$(NRCWdkDir)\WindowsDriver.common.props" Condition="'$(NRCWdkDir)' != ''" />
   <Import Project="$(WDKContentRoot)\build\WindowsDriver.common.props" Condition="'$(NRCWdkDir)' == '' and Exists('$(WDKContentRoot)\build\WindowsDriver.common.props')" />
   <PropertyGroup>
