@@ -50,20 +50,12 @@ jobs:
             --accept-source-agreements --accept-package-agreements --disable-interactivity
           Write-Host "WDKContentRoot=$env:WDKContentRoot"
           Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -ErrorAction SilentlyContinue | Select-Object Name
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsInstaller = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
-          $vsInstallDirs = @(& $vswhere -products * -property installationPath)
-          Write-Host "VS installs: $($vsInstallDirs -join '; ')"
-          foreach ($dir in $vsInstallDirs) {
-            Write-Host "Installing Windows11SDK.26100 into $dir ..."
-            & $vsInstaller modify --installPath $dir --add Microsoft.VisualStudio.Component.Windows11SDK.26100 --quiet --norestart
-            $vsExit = $LASTEXITCODE
-            Write-Host "vs setup exit: $vsExit"
-          }
-          if ($vsExit -notin @(0, 3010)) { throw "VS SDK install failed exit=$vsExit" }
-          Start-Sleep -Seconds 5
-          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object Name
-          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -ErrorAction SilentlyContinue | Select-Object Name
+
+      - name: Install Windows SDK 10.0.26100
+        uses: jburto94/setup-windows-sdk@v1
+        with:
+          sdk-version: 10.0.26100.0
+          architecture: x64
 
       - name: Build KMDF driver
         shell: pwsh
