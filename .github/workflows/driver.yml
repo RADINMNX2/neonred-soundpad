@@ -50,12 +50,17 @@ jobs:
             --accept-source-agreements --accept-package-agreements --disable-interactivity
           Write-Host "WDKContentRoot=$env:WDKContentRoot"
           Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -ErrorAction SilentlyContinue | Select-Object Name
-          $sdkSetup = "$env:TEMP\winsdksetup.exe"
-          curl.exe -sSL -o $sdkSetup "https://go.microsoft.com/fwlink/?linkid=2376216"
-          Write-Host "winsdksetup size: $((Get-Item $sdkSetup).Length)"
-          $p = Start-Process -FilePath $sdkSetup -ArgumentList "/features","OptionId.WindowsDesktopSoftwareDevelopmentKit","/quiet","/norestart" -Wait -PassThru
-          Write-Host "winsdksetup exit: $($p.ExitCode)"
-          if ($p.ExitCode -notin @(0, 3010)) { throw "winsdksetup failed exit=$($p.ExitCode)" }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsInstaller = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $vsInstallDirs = @(& $vswhere -products * -property installationPath)
+          Write-Host "VS installs: $($vsInstallDirs -join '; ')"
+          foreach ($dir in $vsInstallDirs) {
+            Write-Host "Installing Windows11SDK.26100 into $dir ..."
+            & $vsInstaller modify --installPath $dir --add Microsoft.VisualStudio.Component.Windows11SDK.26100 --quiet --norestart
+            $vsExit = $LASTEXITCODE
+            Write-Host "vs setup exit: $vsExit"
+          }
+          if ($vsExit -notin @(0, 3010)) { throw "VS SDK install failed exit=$vsExit" }
           Start-Sleep -Seconds 5
           Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object Name
           Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -ErrorAction SilentlyContinue | Select-Object Name
