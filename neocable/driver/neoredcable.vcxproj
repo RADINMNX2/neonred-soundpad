@@ -51,6 +51,14 @@
       <AdditionalLibraryDirectories>$(RustLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
+  <Target Name="NrcDebug" BeforeTargets="PrepareForBuild">
+    <Message Importance="high" Text="NRC_DBG WindowsSdkDir=$(WindowsSdkDir)" />
+    <Message Importance="high" Text="NRC_DBG WindowsTargetPlatformVersion=$(WindowsTargetPlatformVersion)" />
+    <Message Importance="high" Text="NRC_DBG TargetPlatformVersion=$(TargetPlatformVersion)" />
+    <Message Importance="high" Text="NRC_DBG WDKContentRoot=$(WDKContentRoot)" />
+    <Message Importance="high" Text="NRC_DBG WDK_NuGet=$(WDK_NuGet)" />
+    <Message Importance="high" Text="NRC_DBG NRCWdkDir=$(NRCWdkDir)" />
+  </Target>
   <ItemGroup>
     <ClCompile Include="src\driver.cpp" />
     <ClCompile Include="src\device.cpp" />

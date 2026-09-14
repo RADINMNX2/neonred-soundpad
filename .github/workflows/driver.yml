@@ -68,6 +68,12 @@ jobs:
           }
           if (-not $msbuild) { throw "MSBuild.exe not found" }
           Write-Host "MSBuild: $msbuild"
+          $sdkTargets = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v170\Microsoft.Cpp.WindowsSDK.targets"
+          Write-Host "---- WindowsSDK.targets 20-60 ----"
+          Get-Content $sdkTargets -ErrorAction SilentlyContinue | Select-Object -Skip 19 -First 42
+          $sdkProps = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v170\Microsoft.Cpp.WindowsSDK.props"
+          Write-Host "---- WindowsSDK.props 1-70 ----"
+          Get-Content $sdkProps -ErrorAction SilentlyContinue | Select-Object -First 70
           $wdkContent = $env:NRC_WDK_CONTENT
           Write-Host "WDKContentRoot: $wdkContent"
           $propsPath = "$wdkContent\build\10.0.28000.0\WindowsDriver.Common.props"
