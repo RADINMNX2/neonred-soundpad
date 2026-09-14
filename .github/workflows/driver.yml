@@ -54,6 +54,9 @@ jobs:
           $c = "$pkg\microsoft.windows.wdk.x64\10.0.28000.2526\c"
           Write-Host "WDKContentRoot=$c"
           Write-Host "common.props exists: $(Test-Path "$c\build\10.0.28000.0\WindowsDriver.Common.props")"
+          New-Item -ItemType Junction -Path "$c\Include\10.0" -Target "$c\Include\10.0.28000.0" -ErrorAction SilentlyContinue
+          New-Item -ItemType Junction -Path "$c\Lib\10.0" -Target "$c\Lib\10.0.28000.0" -ErrorAction SilentlyContinue
+          Write-Host "Include\10.0 exists: $(Test-Path "$c\Include\10.0\shared\sdkddkver.h")"
           "NRC_WDK_CONTENT=$c" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build KMDF driver
@@ -80,8 +83,11 @@ jobs:
           Write-Host "common.props exists: $(Test-Path $propsPath)"
           if (-not $wdkContent -or -not (Test-Path $propsPath)) { throw "WDK package missing" }
           $margs = @("/p:Configuration=Release", "/p:Platform=x64",
+            "/p:WindowsSdkDir_10=$wdkContent",
+            "/p:WindowsSDKInstalled=true",
             "/p:WindowsSdkDir=$wdkContent",
             "/p:WDKContentRoot=$wdkContent",
+            "/p:WDK_NuGet=true",
             "/p:NRCWdkDir=$wdkContent\build\10.0.28000.0",
             "/verbosity:minimal")
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
