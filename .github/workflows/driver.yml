@@ -92,7 +92,6 @@ jobs:
             "/p:EnterpriseWDK=True",
             "/p:MatchingSdkPresent=true",
             "/p:MatchingWdkPresent=true",
-            "/p:MatchingWdkPresent=true",
             "/p:WDK_NuGet=true",
             "/p:WDKVersion=10.0.28000.0",
             "/p:WDKVersion=10.0.28000.0",
