@@ -83,7 +83,13 @@ jobs:
             Write-Host "warning: WindowsDriver.common.props not found under WDK build dir (will try default path)"
             $nrcWdkDir = ""
           }
-          $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/verbosity:minimal")
+          Write-Host "##[group]WDK props inspection"
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object FullName | Select-Object -First 40
+          $osProps = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -Recurse -Filter "WindowsDriver.OS.props" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($osProps) { Write-Host "---- WindowsDriver.OS.props ----"; Get-Content $osProps.FullName | Select-Object -First 40 }
+          if ($props) { Write-Host "---- WindowsDriver.Common.props ----"; Get-Content $props.FullName | Select-Object -First 60 }
+          Write-Host "##[endgroup]"
+          $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/p:TargetPlatformVersion=10.0", "/verbosity:minimal")
           if ($nrcWdkDir) { $margs += "/p:NRCWdkDir=$nrcWdkDir" }
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
 
