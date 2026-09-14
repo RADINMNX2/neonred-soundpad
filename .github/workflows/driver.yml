@@ -56,10 +56,26 @@ jobs:
         env:
           WDKContentRoot: 'C:\Program Files (x86)\Windows Kits\10\'
         run: |
-          $msbuild = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin\MSBuild.exe" |
-            Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $msbuild) { throw "MSBuild not found" }
-          & $msbuild.FullName neocable\driver\neoredcable.vcxproj `
+          Write-Host "##[group]toolchain discovery"
+          Get-ChildItem "C:\Windows\System32\where.exe" | Out-Null
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          Write-Host "vswhere='$vswhere' exists=$(Test-Path $vswhere)"
+          if (Test-Path $vswhere) {
+            & $vswhere -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe"
+            & $vswhere -products * -property installationPath
+          }
+          Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio" -ErrorAction SilentlyContinue | Select-Object FullName
+          [System.Environment]::GetEnvironmentVariable("PATH","Machine") -split ";" | Where-Object { $_ -match "MSBuild|VC" } | ForEach-Object { Write-Host "path-hit: $_" }
+          Write-Host "##[endgroup]"
+          if (Test-Path $vswhere) {
+            $msbuild = (& $vswhere -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1)
+          }
+          if (-not $msbuild) {
+            $msbuild = (Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio" -Filter MSBuild.exe -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -eq "Bin" } | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          }
+          if (-not $msbuild) { throw "MSBuild.exe not found - see toolchain discovery output above" }
+          Write-Host "MSBuild: $msbuild"
+          & $msbuild neocable\driver\neoredcable.vcxproj `
             /p:Configuration=Release /p:Platform=x64 `
             /p:WindowsTargetPlatformVersion=10.0.26100.0 `
             /p:VisualStudioVersion=17.0 `
