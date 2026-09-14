@@ -92,6 +92,7 @@ jobs:
             "/p:WDK_NuGet=true",
             "/p:WDKVersion=10.0.28000.0",
             "/p:WDKBuildFolder=10.0.28000.0",
+            "/p:DriverTargetPlatform=x64",
             "/p:NRCWdkDir=$wc\build\10.0.28000.0",
             "/verbosity:minimal")
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
