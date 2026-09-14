@@ -85,6 +85,7 @@ jobs:
           $margs = @("/p:Configuration=Release", "/p:Platform=x64",
             "/p:WindowsSdkDir_10=$wdkContent",
             "/p:WindowsSDKInstalled=true",
+            "/p:WindowsSDK_Desktop_Support=true",
             "/p:WindowsSdkDir=$wdkContent",
             "/p:WDKContentRoot=$wdkContent",
             "/p:WDK_NuGet=true",
