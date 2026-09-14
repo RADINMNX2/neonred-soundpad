@@ -89,7 +89,7 @@ jobs:
           if ($osProps) { Write-Host "---- WindowsDriver.OS.props ----"; Get-Content $osProps.FullName | Select-Object -First 40 }
           if ($props) { Write-Host "---- WindowsDriver.Common.props ----"; Get-Content $props.FullName | Select-Object -First 60 }
           Write-Host "##[endgroup]"
-          $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/p:TargetPlatformVersion=10.0", "/verbosity:minimal")
+          $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/p:TargetPlatformVersion=10.0", "/p:TargetPlatformVersion_NI=10.0", "/verbosity:minimal")
           if ($nrcWdkDir) { $margs += "/p:NRCWdkDir=$nrcWdkDir" }
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
 
