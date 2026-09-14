@@ -50,9 +50,13 @@ jobs:
             --accept-source-agreements --accept-package-agreements --disable-interactivity
           Write-Host "WDKContentRoot=$env:WDKContentRoot"
           Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -ErrorAction SilentlyContinue | Select-Object Name
-          Write-Host "Include dirs:"
+          $sdkSetup = "$env:TEMP\winsdksetup.exe"
+          curl.exe -sSL -o $sdkSetup https://aka.ms/winsdkbuildtools
+          Write-Host "winsdksetup size: $((Get-Item $sdkSetup).Length)"
+          & $sdkSetup /features OptionId.WindowsDesktopSoftwareDevelopmentKit /quiet /norestart
+          $sdkExit = $LASTEXITCODE
+          Write-Host "winsdksetup exit: $sdkExit"
           Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object Name
-          Write-Host "Bin dirs:"
           Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -ErrorAction SilentlyContinue | Select-Object Name
 
       - name: Build KMDF driver
@@ -94,6 +98,11 @@ jobs:
           if ($props) { Write-Host "---- WindowsDriver.Common.props ----"; Get-Content $props.FullName | Select-Object -First 60 }
           Write-Host "##[endgroup]"
           $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/verbosity:minimal")
+          $sdkInclude = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+          if ($sdkInclude) {
+            Write-Host "Installed SDK include: $($sdkInclude.Name)"
+            $margs += "/p:WindowsTargetPlatformVersion=$($sdkInclude.Name)"
+          }
           if ($nrcWdkDir) { $margs += "/p:NRCWdkDir=$nrcWdkDir" }
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
 
