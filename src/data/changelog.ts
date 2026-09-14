@@ -18,6 +18,26 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.9.1",
+    date: "2026-09-14",
+    features: {
+      changed: [
+        "Help wizard rebuilt as a full neon-glass experience: the modal now animates in with a blur-and-scale transition, every step slides with its own direction-aware animation and staggered reveal, and a glowing gradient progress bar plus clickable dots track your position.",
+        "A new summary step shows your selected Mic / Injector / Monitor devices in one place with a restart reminder, so you can confirm everything before finishing setup.",
+        "Keyboard and screen-reader support: Escape, arrow keys (RTL-aware), Home/End shortcuts, a focus trap, step headings focused automatically, and descriptive labels for dots and buttons.",
+        "Respects the reduced-motion preference — all wizard animations are skipped when animations are disabled.",
+      ]
+    },
+    featuresFa: {
+      changed: [
+        "ویزارد راهنما به‌صورت کامل با ظاهر نئون-شیشه‌ای بازسازی شد: مودال با ترنزیشن بلور+مقیاس وارد می‌شود، هر مرحله با انیمیشن جهت‌دار مخصوص خود و نمایش پلکانی اسلاید می‌شود و نوار پیشرفت درخشان گرادیانی به‌همراه نقاط قابل‌کلیک موقعیت شما را نشان می‌دهد.",
+        "گام خلاصهٔ جدید دستگاه‌های Mic / Injector / Monitor انتخاب‌شده را یکجا با یادآوری ریاستارت نشان می‌دهد تا قبل از پایان راه‌اندازی همه‌چیز را تأیید کنید.",
+        "پشتیبانی کیبورد و صفحه‌خوان: Escape، کلیدهای جهت‌دار (سازگار با RTL)، میانبرهای Home/End، قفل فوکوس، فوکوس خودکار روی تیتر هر مرحله و برچسب‌های توصیفی برای نقاط و دکمه‌ها.",
+        "به تنظیمات کاهش حرکت (reduced-motion) احترام می‌گذارد — وقتی انیمیشن‌ها خاموش باشند همهٔ انیمیشن‌های ویزارد نادیده گرفته می‌شوند.",
+      ]
+    },
+  },
+  {
     version: "2.9.0",
     date: "2026-09-14",
     features: {

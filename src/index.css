@@ -556,6 +556,164 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), [role="button
 .animate-modal-out {
   animation: modal-out 0.18s ease-in both;
 }
+
+/* --- Help Wizard Modal (Neon Glass Wizard) --- */
+.wizard-backdrop-in {
+  animation: wizard-backdrop-in 250ms ease-out both;
+}
+.wizard-backdrop-out {
+  animation: wizard-backdrop-out 180ms ease-in both;
+}
+@keyframes wizard-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes wizard-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.wizard-modal-in {
+  animation: wizard-modal-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.wizard-modal-out {
+  animation: wizard-modal-out 180ms ease-in both;
+}
+@keyframes wizard-modal-in {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); filter: blur(8px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes wizard-modal-out {
+  from { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  to { opacity: 0; transform: translateY(14px) scale(0.985); filter: blur(4px); }
+}
+
+.wizard-progress-track {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  z-index: 20;
+  overflow: hidden;
+}
+.wizard-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #ef4444, #f43f5e);
+  transform-origin: left;
+  transform: scaleX(var(--wizard-progress, 0));
+  transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.8);
+}
+[dir="rtl"] .wizard-progress-bar {
+  transform-origin: right;
+}
+
+.wizard-step-enter-fwd,
+.wizard-step-enter-back {
+  animation: wizard-step-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.wizard-step-enter-fwd { --wiz-x: 36px; }
+.wizard-step-enter-back { --wiz-x: -36px; }
+[dir="rtl"] .wizard-step-enter-fwd { --wiz-x: -36px; }
+[dir="rtl"] .wizard-step-enter-back { --wiz-x: 36px; }
+@keyframes wizard-step-in {
+  from { opacity: 0; transform: translateX(var(--wiz-x, 36px)); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.wizard-step-enter-fwd .wizard-stagger > *,
+.wizard-step-enter-back .wizard-stagger > * {
+  animation: child-in 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--stagger-i, 0) * 25ms);
+}
+.wizard-step-enter-fwd .wizard-stagger > :nth-child(2),
+.wizard-step-enter-back .wizard-stagger > :nth-child(2) { --stagger-i: 1; }
+.wizard-step-enter-fwd .wizard-stagger > :nth-child(3),
+.wizard-step-enter-back .wizard-stagger > :nth-child(3) { --stagger-i: 2; }
+.wizard-step-enter-fwd .wizard-stagger > :nth-child(4),
+.wizard-step-enter-back .wizard-stagger > :nth-child(4) { --stagger-i: 3; }
+.wizard-step-enter-fwd .wizard-stagger > :nth-child(5),
+.wizard-step-enter-back .wizard-stagger > :nth-child(5) { --stagger-i: 4; }
+.wizard-step-enter-fwd .wizard-stagger > :nth-child(6),
+.wizard-step-enter-back .wizard-stagger > :nth-child(6) { --stagger-i: 5; }
+.wizard-step-enter-fwd .wizard-stagger > :nth-child(7),
+.wizard-step-enter-back .wizard-stagger > :nth-child(7) { --stagger-i: 6; }
+.wizard-step-enter-fwd .wizard-stagger > :nth-child(n + 8),
+.wizard-step-enter-back .wizard-stagger > :nth-child(n + 8) { --stagger-i: 7; }
+
+.wizard-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  transition: all 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  border: none;
+  padding: 0;
+}
+.wizard-dot-active {
+  background: linear-gradient(135deg, #ef4444, #f43f5e);
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.8);
+  transform: scale(1.35);
+}
+.wizard-dot-done {
+  background: rgba(239, 68, 68, 0.55);
+  cursor: pointer;
+}
+.wizard-dot-done:hover {
+  transform: scale(1.15);
+}
+.wizard-dot-future {
+  background: rgb(63, 63, 70);
+}
+
+.wizard-icon-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 1.25rem;
+  border: 1px dashed rgba(244, 63, 94, 0.45);
+  animation: wizard-ring-spin 12s linear infinite;
+  pointer-events: none;
+}
+@keyframes wizard-ring-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.wizard-glow-orb,
+.wizard-glow-orb-2 {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+  animation: wizard-orb-pulse 5s ease-in-out infinite both;
+}
+.wizard-glow-orb {
+  width: 16rem;
+  height: 16rem;
+  background: rgba(239, 68, 68, 0.12);
+  top: 0;
+  right: 0;
+}
+.wizard-glow-orb-2 {
+  width: 16rem;
+  height: 16rem;
+  background: rgba(236, 72, 153, 0.07);
+  bottom: 0;
+  left: 0;
+  animation-delay: 1.4s;
+}
+@keyframes wizard-orb-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.animate-shimmer {
+  background-image: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.45), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
 @keyframes eq-column-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -590,6 +748,21 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), [role="button
   .animate-slide-up,
   .animate-modal-out {
     animation: none !important;
+  }
+  /* Wizard modal (Neon Glass Wizard) */
+  .wizard-backdrop-in,
+  .wizard-backdrop-out,
+  .wizard-modal-in,
+  .wizard-modal-out,
+  .wizard-step-enter-fwd,
+  .wizard-step-enter-back,
+  .wizard-step-enter-fwd .wizard-stagger > *,
+  .wizard-step-enter-back .wizard-stagger > *,
+  .wizard-glow-orb,
+  .wizard-glow-orb-2,
+  .wizard-icon-ring {
+    animation: none !important;
+    animation-delay: 0ms !important;
   }
   /* Disable all common animations */
   .animate-fade-in,
@@ -651,6 +824,19 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), [role="button
 .motion-off .eq-column-in,
 .motion-off .animate-slide-up,
 .motion-off .animate-modal-out {
+  animation: none !important;
+}
+.motion-off .wizard-backdrop-in,
+.motion-off .wizard-backdrop-out,
+.motion-off .wizard-modal-in,
+.motion-off .wizard-modal-out,
+.motion-off .wizard-step-enter-fwd,
+.motion-off .wizard-step-enter-back,
+.motion-off .wizard-step-enter-fwd .wizard-stagger > *,
+.motion-off .wizard-step-enter-back .wizard-stagger > *,
+.motion-off .wizard-glow-orb,
+.motion-off .wizard-glow-orb-2,
+.motion-off .wizard-icon-ring {
   animation: none !important;
 }
 .motion-off *,
