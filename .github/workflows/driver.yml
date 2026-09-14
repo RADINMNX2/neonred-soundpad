@@ -104,11 +104,6 @@ jobs:
           if ($props) { Write-Host "---- WindowsDriver.Common.props ----"; Get-Content $props.FullName | Select-Object -First 60 }
           Write-Host "##[endgroup]"
           $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/verbosity:minimal")
-          $sdkInclude = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
-          if ($sdkInclude) {
-            Write-Host "Installed SDK include: $($sdkInclude.Name)"
-            $margs += "/p:WindowsTargetPlatformVersion=$($sdkInclude.Name)"
-          }
           if ($nrcWdkDir) { $margs += "/p:NRCWdkDir=$nrcWdkDir" }
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
 
