@@ -43,60 +43,43 @@ jobs:
           Test-Path "neocable\target\x86_64-pc-windows-msvc\release\neocable_kernel.lib"
           Get-Item "neocable\target\x86_64-pc-windows-msvc\release\neocable_kernel.lib" | Select-Object Length
 
-      - name: Install WDK (26100)
+      - name: Fetch WDK NuGet package
         shell: pwsh
         run: |
-          winget install -e --id Microsoft.WindowsWDK.10.0.26100 `
-            --accept-source-agreements --accept-package-agreements --disable-interactivity
-          Write-Host "WDKContentRoot=$env:WDKContentRoot"
-          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -ErrorAction SilentlyContinue | Select-Object Name
-
-      - name: Install Windows SDK 10.0.26100
-        uses: GuillaumeFalourd/setup-windows10-sdk-action@v2
-        with:
-          sdk-version: 10.0.26100.0
+          $pkg = "$env:RUNNER_TEMP\wdknuget"
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+          curl.exe -sSL -o "$pkg\wdk.nupkg" "https://api.nuget.org/v3-flatcontainer/microsoft.windows.wdk.x64/10.0.28000.2526/microsoft.windows.wdk.x64.10.0.28000.2526.nupkg"
+          Write-Host "wdk nupkg size: $((Get-Item "$pkg\wdk.nupkg").Length)"
+          Expand-Archive -Path "$pkg\wdk.nupkg" -DestinationPath "$pkg\microsoft.windows.wdk.x64\10.0.28000.2526"
+          $c = "$pkg\microsoft.windows.wdk.x64\10.0.28000.2526\c"
+          Write-Host "WDKContentRoot=$c"
+          Write-Host "common.props exists: $(Test-Path "$c\build\10.0.28000.0\WindowsDriver.Common.props")"
+          "NRC_WDK_CONTENT=$c" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build KMDF driver
         shell: pwsh
-        env:
-          WDKContentRoot: 'C:\Program Files (x86)\Windows Kits\10\'
         run: |
-          Write-Host "##[group]toolchain discovery"
-          Get-ChildItem "C:\Windows\System32\where.exe" | Out-Null
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          Write-Host "vswhere='$vswhere' exists=$(Test-Path $vswhere)"
-          if (Test-Path $vswhere) {
-            & $vswhere -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe"
-            & $vswhere -products * -property installationPath
-          }
-          Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio" -ErrorAction SilentlyContinue | Select-Object FullName
-          [System.Environment]::GetEnvironmentVariable("PATH","Machine") -split ";" | Where-Object { $_ -match "MSBuild|VC" } | ForEach-Object { Write-Host "path-hit: $_" }
-          Write-Host "##[endgroup]"
           if (Test-Path $vswhere) {
             $msbuild = (& $vswhere -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1)
           }
           if (-not $msbuild) {
             $msbuild = (Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio" -Filter MSBuild.exe -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -eq "Bin" } | Sort-Object FullName -Descending | Select-Object -First 1).FullName
           }
-          if (-not $msbuild) { throw "MSBuild.exe not found - see toolchain discovery output above" }
+          if (-not $msbuild) { throw "MSBuild.exe not found" }
           Write-Host "MSBuild: $msbuild"
-          $props = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -Recurse -Filter "WindowsDriver.common.props" -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1
-          if ($props) {
-            Write-Host "WDK common.props: $($props.FullName)"
-            $nrcWdkDir = $props.DirectoryName
-          } else {
-            Write-Host "warning: WindowsDriver.common.props not found under WDK build dir (will try default path)"
-            $nrcWdkDir = ""
-          }
-          Write-Host "##[group]WDK props inspection"
-          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object FullName | Select-Object -First 40
-          $osProps = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -Recurse -Filter "WindowsDriver.OS.props" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($osProps) { Write-Host "---- WindowsDriver.OS.props ----"; Get-Content $osProps.FullName | Select-Object -First 40 }
-          if ($props) { Write-Host "---- WindowsDriver.Common.props ----"; Get-Content $props.FullName | Select-Object -First 60 }
-          Write-Host "##[endgroup]"
-          $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/verbosity:minimal")
-          if ($nrcWdkDir) { $margs += "/p:NRCWdkDir=$nrcWdkDir" }
+          $wdkContent = $env:NRC_WDK_CONTENT
+          Write-Host "WDKContentRoot: $wdkContent"
+          $propsPath = "$wdkContent\build\10.0.28000.0\WindowsDriver.Common.props"
+          Write-Host "common.props exists: $(Test-Path $propsPath)"
+          if (-not $wdkContent -or -not (Test-Path $propsPath)) { throw "WDK package missing" }
+          $margs = @("/p:Configuration=Release", "/p:Platform=x64",
+            "/p:WindowsSdkDir=$wdkContent",
+            "/p:WDKContentRoot=$wdkContent",
+            "/p:NRCWdkDir=$wdkContent\build\10.0.28000.0",
+            "/verbosity:minimal")
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
+          if ($LASTEXITCODE -ne 0) { throw "msbuild failed exit=$LASTEXITCODE" }
 
       - name: Test-sign driver + export cert
         shell: pwsh
