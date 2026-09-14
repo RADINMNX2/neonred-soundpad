@@ -82,14 +82,16 @@ jobs:
           $propsPath = "$wdkContent\build\10.0.28000.0\WindowsDriver.Common.props"
           Write-Host "common.props exists: $(Test-Path $propsPath)"
           if (-not $wdkContent -or -not (Test-Path $propsPath)) { throw "WDK package missing" }
+          $wc = "$wdkContent\"
           $margs = @("/p:Configuration=Release", "/p:Platform=x64",
-            "/p:WindowsSdkDir_10=$wdkContent",
+            "/p:WindowsSdkDir_10=$wc",
             "/p:WindowsSDKInstalled=true",
             "/p:WindowsSDK_Desktop_Support=true",
-            "/p:WindowsSdkDir=$wdkContent",
-            "/p:WDKContentRoot=$wdkContent",
+            "/p:WindowsSdkDir=$wc",
+            "/p:WDKContentRoot=$wc",
             "/p:WDK_NuGet=true",
-            "/p:NRCWdkDir=$wdkContent\build\10.0.28000.0",
+            "/p:WDKVersion=10.0.28000.0",
+            "/p:NRCWdkDir=$wc\build\10.0.28000.0",
             "/verbosity:minimal")
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
           if ($LASTEXITCODE -ne 0) { throw "msbuild failed exit=$LASTEXITCODE" }
