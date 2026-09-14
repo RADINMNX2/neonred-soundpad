@@ -1,0 +1,61 @@
+;
+; NeonRed Cable — minimal KMDF driver INF (root-enumerated, load-proof skeleton)
+; Full audio endpoint registration (componentized INF) arrives with the
+; sysvad-derived audio topology in P1-P2.
+;
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = MEDIA
+ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider    = %ProviderName%
+DriverVer   = 09/14/2026,0.1.0.0
+CatalogFile = neoredcable.cat
+
+[DestinationDirs]
+NeoRedCable_Files_Driver = 12
+NeoRedCable_Files_Coinstaller = 11
+
+[Manufacturer]
+%ProviderName%=Standard,NTamd64
+
+[Standard.NTamd64]
+%DeviceDescription%=NeoRedCable_Install, Root\NRC0000
+
+[NeoRedCable_Install.NT]
+CopyFiles=NeoRedCable_Files_Driver
+
+[NeoRedCable_Files_Driver]
+neoredcable.sys
+
+[NeoRedCable_Install.NT.Services]
+AddService = neoredcable, 0x00000002, NeoRedCable_Service_Inst
+
+[NeoRedCable_Service_Inst]
+DisplayName   = %ServiceName%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\neoredcable.sys
+
+[NeoRedCable_Install.NT.Wdf]
+KmdfService = neoredcable, NeoRedCable_Wdf_Inst
+
+[NeoRedCable_Wdf_Inst]
+KmdfLibraryVersion = 1.33
+
+[NeoRedCable_Install.NT.CoInstallers]
+AddReg = NeoRedCable_Coinstaller_AddReg
+
+[NeoRedCable_Coinstaller_AddReg]
+HKR,,CoInstallers32,0x00010000,"WdfCoinstaller01033.dll,WdfCoInstaller"
+
+[NeoRedCable_Install.NT.Decode]
+NeoRedCable_Files_Coinstaller = NeoRedCable_Coinstaller_Copy
+
+[NeoRedCable_Coinstaller_Copy]
+WdfCoinstaller01033.dll
+
+[Strings]
+ProviderName        = "NeonRed"
+DeviceDescription   = "NeonRed Cable"
+ServiceName         = "neoredcable"

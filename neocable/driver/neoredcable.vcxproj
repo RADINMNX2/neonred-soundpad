@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{E1E2CF5B-3A4B-4B6A-9C2D-1F4D9A8C6E33}</ProjectGuid>
+    <RootNamespace>neoredcable</RootNamespace>
+    <Keyword>KernelModeDriver</Keyword>
+    <DriverType>KMDF</DriverType>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Driver</ConfigurationType>
+    <TargetVersion>Windows10</TargetVersion>
+    <PlatformToolset>v143</PlatformToolset>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <UseStampInf>false</UseStampInf>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="$(WDKContentRoot)\build\WindowsDriver.common.props" />
+  <PropertyGroup>
+    <RustLibDir>..\target\x86_64-pc-windows-msvc\release</RustLibDir>
+    <KmdfVersion>1.33</KmdfVersion>
+    <OutDir>$(SolutionDir)build\$(Configuration)\$(Platform)\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(Configuration)\$(Platform)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <PreprocessorDefinitions>_WIN32;_NTDDI_VERSION=0x0A00000C;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>neocable_kernel.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(RustLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\driver.cpp" />
+    <ClCompile Include="src\device.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\neoredcable.h" />
+    <ClInclude Include="include\neocable_protocol.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="inf\neoredcable.inf" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="$(WDKContentRoot)\build\WindowsDriver.common.targets" />
+</Project>

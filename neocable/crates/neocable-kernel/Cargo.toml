@@ -1,0 +1,13 @@
+[package]
+name = "neocable-kernel"
+version = "0.1.0"
+edition = "2021"
+description = "no_std Rust core slotted into the NeonRed Cable kernel driver (ring view over driver-allocated memory + extern C FFI), linked as staticlib"
+license = "MIT"
+
+[lib]
+name = "neocable_kernel"
+crate-type = ["rlib", "staticlib"]
+
+[features]
+kernel = []

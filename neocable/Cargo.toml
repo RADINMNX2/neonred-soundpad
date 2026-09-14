@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/neocable-core", "crates/neocable-kernel"]
+default-members = ["crates/neocable-core", "crates/neocable-kernel"]
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

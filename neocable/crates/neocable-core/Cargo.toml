@@ -1,0 +1,9 @@
+[package]
+name = "neocable-core"
+version = "0.1.0"
+edition = "2021"
+description = "Rust core of the NeonRed Cable virtual audio driver: ring buffer, format engine, IOCTL protocol (driver-agnostic, host-testable)"
+license = "MIT"
+
+[lib]
+name = "neocable_core"

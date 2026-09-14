@@ -1,0 +1,79 @@
+name: NeonRed Cable — Driver CI
+
+on:
+  push:
+    paths:
+      - 'neocable/**'
+      - '.github/workflows/driver.yml'
+  workflow_dispatch:
+
+jobs:
+  core:
+    name: core (cargo test)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: neocable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test Rust core
+        run: cargo test --workspace
+      - name: Enforce no warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  driver:
+    name: driver (hybrid KMDF build + test-sign)
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build no_std kernel staticlib
+        working-directory: neocable
+        run: cargo build --release --features kernel --target x86_64-pc-windows-msvc -p neocable-kernel
+
+      - name: Confirm staticlib exists
+        shell: pwsh
+        run: |
+          Test-Path "neocable\target\x86_64-pc-windows-msvc\release\neocable_kernel.lib"
+          Get-Item "neocable\target\x86_64-pc-windows-msvc\release\neocable_kernel.lib" | Select-Object Length
+
+      - name: Install WDK (26100)
+        shell: pwsh
+        run: |
+          winget install -e --id Microsoft.WindowsWDK.10.0.26100 `
+            --accept-source-agreements --accept-package-agreements --disable-interactivity
+          Write-Host "WDKContentRoot=$env:WDKContentRoot"
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -ErrorAction SilentlyContinue | Select-Object Name
+
+      - name: Build KMDF driver
+        shell: pwsh
+        env:
+          WDKContentRoot: 'C:\Program Files (x86)\Windows Kits\10\'
+        run: |
+          $msbuild = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\*\MSBuild\Current\Bin\MSBuild.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $msbuild) { throw "MSBuild not found" }
+          & $msbuild.FullName neocable\driver\neoredcable.vcxproj `
+            /p:Configuration=Release /p:Platform=x64 `
+            /p:WindowsTargetPlatformVersion=10.0.26100.0 `
+            /p:VisualStudioVersion=17.0 `
+            /verbosity:minimal
+
+      - name: Test-sign driver + export cert
+        shell: pwsh
+        run: |
+          .\neocable\driver\scripts\test-sign.ps1
+          Get-ChildItem neocable\driver\build\test-sign | Select-Object Name, Length
+
+      - name: Upload driver package
+        uses: actions/upload-artifact@v4
+        with:
+          name: neoredcable-test-signed
+          path: neocable/driver/build/test-sign/**
+          if-no-files-found: error
