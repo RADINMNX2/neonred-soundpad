@@ -83,7 +83,7 @@ jobs:
             Write-Host "warning: WindowsDriver.common.props not found under WDK build dir (will try default path)"
             $nrcWdkDir = ""
           }
-          $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/p:WindowsTargetPlatformVersion=10.0.26100.0", "/verbosity:minimal")
+          $margs = @("/p:Configuration=Release", "/p:Platform=x64", "/verbosity:minimal")
           if ($nrcWdkDir) { $margs += "/p:NRCWdkDir=$nrcWdkDir" }
           & $msbuild neocable\driver\neoredcable.vcxproj @margs
 
