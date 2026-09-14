@@ -294,3 +294,14 @@ export const getDominantColor = (imageSrc: string): Promise<string> => {
     };
   });
 };
+
+// Build a crash-proof file:// URL. Unencoded Unicode/#/%/? characters in raw
+// `file://${path}` concatenation can break Chromium's URL parser and crash the
+// media pipeline. Percent-encode every path segment (drive-letter colon kept).
+export const toFileUrl = (p: string): string => {
+  const fwd = p.replace(/\\/g, '/');
+  const drive = fwd.match(/^([A-Za-z]):/);
+  const rest = drive ? fwd.slice(2) : fwd;
+  const encoded = rest.split('/').map(seg => encodeURIComponent(seg)).join('/');
+  return 'file:///' + (drive ? drive[1] + ':' : '') + encoded;
+};

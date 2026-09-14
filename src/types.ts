@@ -227,6 +227,7 @@ declare global {
       maximize: () => void;
       close: () => void;
       onWindowStateChange: (callback: (isMaximized: boolean) => void) => () => void;
+      onRendererCrashed: (callback: (info: { reason: string; exitCode: number; loop: boolean }) => void) => () => void;
       hideToTray: () => void;
       showMainApp: () => void;
       quitApp: () => void;

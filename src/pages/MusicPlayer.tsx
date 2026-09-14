@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { MusicTrack, ExtendedAudioElement, VisualizerConfig, SpatiflacExtension, OnlineTrack, QualityOption } from '../types';
-import { fileToBase64, extractAlbumArt, getDominantColor, parseAudioMetadata } from '../utils/audioHelpers';
+import { fileToBase64, extractAlbumArt, getDominantColor, parseAudioMetadata, toFileUrl } from '../utils/audioHelpers';
 import { buildLrcPath } from '../utils/lyrics';
 import RealTimeVisualizer from '../components/RealTimeVisualizer';
 import VisualizerSeekBar from '../components/VisualizerSeekBar';
@@ -140,6 +140,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1.0);
   const [isMuted, setIsMuted] = useState(false);
+  // Media decode error surfacing (v2.9.0): no more silent death on unplayable files
+  const [playbackError, setPlaybackError] = useState<{ title?: string; code: number } | null>(null);
+  const skippedIdsRef = useRef<Set<string>>(new Set());
   const prevVolumeRef = useRef(1.0);
   const [adaptiveColor, setAdaptiveColor] = useState<string>('#ef4444');
   
@@ -156,6 +159,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         manualColor: '#ec4899'
     };
   });
+
+  // Persist the last played track for the recovery overlay (v2.9.0)
+  useEffect(() => {
+    try {
+      const cur = currentTrackIndex !== -1 && playlist[currentTrackIndex] ? playlist[currentTrackIndex] : null;
+      if (cur && (cur.path || cur.url)) {
+        localStorage.setItem('neonred-last-track', cur.path || cur.url || '');
+      }
+    } catch (e) {}
+  }, [currentTrackIndex, playlist]);
 
   // Persist Settings (debounced playlist save to avoid excessive localStorage writes)
   useEffect(() => {
@@ -393,7 +406,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             title: fname.replace(/\.[^/.]+$/, '').trim() || fname,
             artist: tRef.current('unknownArtist'),
             album: parent || tRef.current('unknownAlbum'),
-            url: `file://${p}`,
+            url: toFileUrl(p),
             path: p,
             duration: 0,
           };
@@ -494,7 +507,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           title: track.title,
           artist: track.artist,
           album: track.album,
-          url: `file://${resolved.path}`,
+          url: toFileUrl(resolved.path),
           path: resolved.path,
           duration: track.duration || 0,
           cover: track.cover,
@@ -541,7 +554,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         title: track.title,
         artist: track.artist,
         album: track.album,
-        url: `file://${res.path}`,
+        url: toFileUrl(res.path),
         path: res.path,
         duration: track.duration || 0,
         cover: track.cover,
@@ -565,6 +578,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   
   // Track the *intended* source string to compare against, avoiding browser encoding mismatches
   const currentAudioSrcRef = useRef<string | null>(null);
+  // Latest device a sinkId was applied to, so we don't re-apply it on every play (v2.9.0)
+  const lastAppliedSinkRef = useRef<string | null>(null);
   
   // Handle Initial File from OS (Open With)
   useEffect(() => {
@@ -602,7 +617,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
               const newTrack: MusicTrack = {
                   id: tempId, title, artist, album, 
-                  url: `file://${filePath}`, path: filePath, 
+                  url: toFileUrl(filePath), path: filePath, 
                   duration: metaDuration || 0, cover
               };
               
@@ -630,9 +645,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const [audioCtxReady, setAudioCtxReady] = useState(false);
   const waveformCacheRef = useRef<Map<string, number[]>>(new Map());
   const waveDecodeFailedRef = useRef(false); // disable decode after first OOM/crash
+  const decodeInFlightRef = useRef(false); // one giant decode at a time (v2.9.0)
 
   const computeWaveform = useCallback(async (track: MusicTrack, ctx: AudioContext): Promise<number[] | null> => {
     try {
+      // Never run two heavyweight decodes concurrently on rapid track switches.
+      if (decodeInFlightRef.current) return null;
       let buf: ArrayBuffer | null = null;
       if (track.path && window.electronAPI?.readAudioBytes) {
         const res = await window.electronAPI.readAudioBytes(track.path);
@@ -646,13 +664,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       }
       if (!buf || buf.byteLength < 4096) return null;
       // Hard cap in renderer: anything over 8MB is likely too large to decode safely.
-      if (buf.byteLength > 8 * 1024 * 1024) return null;
+      // Flag it so we don't re-attempt a doomed decode on every track change.
+      if (buf.byteLength > 8 * 1024 * 1024) {
+        waveDecodeFailedRef.current = true;
+        return null;
+      }
+      if (waveDecodeFailedRef.current) return null;
+      decodeInFlightRef.current = true;
       const decodePromise = ctx.decodeAudioData(buf);
       const timeoutPromise = new Promise<null>((_, reject) =>
         setTimeout(() => reject(new Error('decode timeout')), 8000)
       );
       const audioBuf = await Promise.race([decodePromise, timeoutPromise]) as AudioBuffer | null;
       if (!audioBuf) return null;
+      // Sanity bound: extremely long/high-sample-rate buffers blow up memory before the peak loop.
+      if (audioBuf.length > 15000000) return null;
       const data = audioBuf.getChannelData(0);
       const segment = Math.floor(data.length / WAVE_BUCKETS);
       if (segment < 1) return null;
@@ -671,7 +697,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       const p95 = sorted[Math.floor(sorted.length * 0.95)] || 1e-9;
       return out.map(v => Math.min(1, Math.pow(Math.max(0.03, v / p95), 0.7)));
     } catch (e) {
+      waveDecodeFailedRef.current = true;
       return null;
+    } finally {
+      decodeInFlightRef.current = false;
     }
   }, []);
 
@@ -960,9 +989,31 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     const onEnded = () => handleNextRef.current();
 
+    // Media decode error handler (v2.9.0): surface the failure instead of dying silently.
+    const onMediaError = () => {
+        const code = audio.error?.code ?? 0;
+        if (code === 3 || code === 4) {
+            const title = currentTrackIndexRef.current !== -1 && playlistRef.current[currentTrackIndexRef.current]
+                ? playlistRef.current[currentTrackIndexRef.current].title
+                : undefined;
+            setPlaybackError({ title, code });
+            try { audio.load(); } catch (e) {}
+            audio.removeAttribute('src');
+            currentAudioSrcRef.current = null; // allow retry later
+            const trackId = currentTrackIndexRef.current !== -1 && playlistRef.current[currentTrackIndexRef.current]
+                ? (playlistRef.current[currentTrackIndexRef.current].id ?? playlistRef.current[currentTrackIndexRef.current].path ?? playlistRef.current[currentTrackIndexRef.current].url ?? 'unknown')
+                : 'unknown';
+            if (!skippedIdsRef.current.has(trackId)) {
+                skippedIdsRef.current.add(trackId);
+                handleNextRef.current();
+            }
+        }
+    };
+
     audio.addEventListener('timeupdate', updateTime);
     audio.addEventListener('loadedmetadata', updateDuration);
     audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onMediaError);
 
     return () => {
         audio.pause();
@@ -970,6 +1021,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         audio.removeEventListener('timeupdate', updateTime);
         audio.removeEventListener('loadedmetadata', updateDuration);
         audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('error', onMediaError);
         
         // Disconnect all audio nodes to prevent memory leaks
         if (sourceNodeRef.current) {
@@ -1001,15 +1053,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
 
     if (currentTrackIndex !== -1 && playlist[currentTrackIndex]) {
         const track = playlist[currentTrackIndex];
-        const normalizedPath = track.path ? track.path.replace(/\\/g, '/') : null;
-        const newSrc = normalizedPath ? `file://${normalizedPath}` : track.url;
+        const normalizedPath = track.path ? track.path.replace(/\\\\/g, '/') : null;
+        const newSrc = normalizedPath ? toFileUrl(normalizedPath) : track.url;
         
         const doPlay = async () => {
-            // Re-apply sinkId before every play to prevent browser from resetting it on src change
-            if (monitorDeviceIdRef.current && typeof (audio as any).setSinkId === 'function') {
-                await (audio as any).setSinkId(monitorDeviceIdRef.current).catch((e: any) => {
-                    if (e?.name !== 'AbortError' && e?.name !== 'NotSupportedError') console.warn('setSinkId failed', e);
-                });
+            // Apply sinkId only when the device actually changed (avoid death-by-rapid-switch race).
+            const targetSink = monitorDeviceIdRef.current;
+            if (targetSink && targetSink !== lastAppliedSinkRef.current && typeof (audio as any).setSinkId === 'function') {
+                try {
+                    await (audio as any).setSinkId(targetSink);
+                    lastAppliedSinkRef.current = targetSink;
+                } catch (e: any) {
+                    const n = e?.name;
+                    if (n !== 'AbortError' && n !== 'NotSupportedError' && n !== 'InvalidStateError') {
+                        console.warn('setSinkId failed', e);
+                    }
+                }
             }
             if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
             audio.play().catch(console.error);
@@ -1054,8 +1113,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   useEffect(() => {
       const audio = audioElementRef.current as ExtendedAudioElement;
       if (audio && monitorDeviceId && typeof audio.setSinkId === 'function') audio.setSinkId(monitorDeviceId).catch((e: any) => {
-          if (e?.name !== 'AbortError' && e?.name !== 'NotSupportedError') console.warn('setSinkId failed', e);
+          if (e?.name !== 'AbortError' && e?.name !== 'NotSupportedError' && e?.name !== 'InvalidStateError') console.warn('setSinkId failed', e);
       });
+      lastAppliedSinkRef.current = monitorDeviceId;
   }, [monitorDeviceId]);
 
   // Add Files Manually
@@ -1074,7 +1134,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|flac|ogg|m4a)$/i)) continue;
         const originalPath = (file as any).path;
         if (originalPath && knownPaths.has(normPath(originalPath))) continue;
-        let url = originalPath ? `file://${originalPath}` : await fileToBase64(file);
+        let url = originalPath ? toFileUrl(originalPath) : await fileToBase64(file);
         const key = originalPath ? normPath(originalPath) : url;
         if (knownPaths.has(key)) continue;
         knownPaths.add(key);
@@ -1430,6 +1490,25 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-pink-600/5 rounded-full blur-[120px] pointer-events-none"></div>
 
       <div className="flex flex-col lg:flex-row gap-6 h-full z-10 page-stagger">
+
+        {playbackError && (
+          <div className="absolute top-20 right-4 left-4 z-50 flex items-center justify-center">
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-red-950/90 border border-red-500/40 shadow-[0_0_25px_rgba(239,68,68,0.3)] backdrop-blur-md">
+              <XCircle size={18} className="text-red-400 shrink-0" />
+              <span className="text-sm text-red-200 font-medium">
+                {t('playbackError')}
+                {playbackError.title ? ` — ${playbackError.title}` : ''}
+              </span>
+              <button
+                onClick={() => setPlaybackError(null)}
+                className="text-red-300 hover:text-white transition-colors ml-2"
+                title={t('dismiss')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        )}
         
         {/* LEFT: NOW PLAYING */}
         <div className="lg:w-1/3 flex flex-col gap-6">

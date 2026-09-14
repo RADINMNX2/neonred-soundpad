@@ -8,7 +8,7 @@ import HotkeyModal from '../components/HotkeyModal';
 import SoundDetailsModal from '../components/SoundDetailsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import SearchModal from '../components/SearchModal';
-import { fileToBase64, extractAlbumArt } from '../utils/audioHelpers';
+import { fileToBase64, extractAlbumArt, toFileUrl } from '../utils/audioHelpers';
 import { useLanguage } from '../context/LanguageContext';
 
 interface SoundPadProps {
@@ -330,7 +330,7 @@ const SoundPad: React.FC<SoundPadProps> = ({
 
     let src = sound.url;
     if (sound.path) {
-      src = `file://${sound.path}`; 
+      src = toFileUrl(sound.path); 
     }
 
     // Monitor: What I hear (Affected by Deafen)
@@ -707,9 +707,9 @@ const SoundPad: React.FC<SoundPadProps> = ({
         let url = '';
         if (originalPath && window.electronAPI) {
            try {
-             finalPath = await window.electronAPI.saveSoundFile(originalPath);
-             url = `file://${finalPath}`;
-           } catch (err) { url = typeof originalPath === 'string' ? `file://${originalPath}` : ''; }
+finalPath = await window.electronAPI.saveSoundFile(originalPath);
+             url = toFileUrl(finalPath);
+           } catch (err) { url = typeof originalPath === 'string' ? toFileUrl(originalPath) : ''; }
         } else {
           url = await fileToBase64(file);
         }

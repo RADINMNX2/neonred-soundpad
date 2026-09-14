@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback, Component } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, Component } from 'react';
 // Sidebar import removed
 import SoundPad from './pages/SoundPad';
 import Settings from './pages/Settings';
@@ -34,6 +34,27 @@ const AppContent: React.FC = () => {
   
   const { setLanguage } = useLanguage();
   const { reportActivity, isLowPowerMode } = useSmartCore();
+
+  // Renderer crash recovery (v2.9.0): the main process sends this right before reloading.
+  const [crashInfo, setCrashInfo] = useState<{ reason: string; exitCode: number; loop: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onRendererCrashed) return;
+    const off = window.electronAPI.onRendererCrashed((info) => setCrashInfo(info));
+    return off;
+  }, []);
+
+  const lastTrackLabel = useMemo(() => {
+    try {
+      return localStorage.getItem('neonred-last-track') || null;
+    } catch { return null; }
+  }, []);
+
+  useEffect(() => {
+    if (!crashInfo) return;
+    const t = setTimeout(() => window.location.reload(), crashInfo.loop ? 60000 : 4000);
+    return () => clearTimeout(t);
+  }, [crashInfo]);
 
   const endLoading = useCallback(() => setIsLoading(false), []);
 
@@ -309,6 +330,30 @@ const AppContent: React.FC = () => {
         <DeviceSelectorModal isOpen={activeDeviceSelector === 'mic'} onClose={() => setActiveDeviceSelector(null)} title="Microphone Input" description="Select your Real Microphone." devices={inputDevices} selectedDeviceId={micInputDeviceId} onSelect={setMicInputDeviceId} type="input" customOptions={[{ deviceId: 'default', label: 'Default Input' }]} />
         <DeviceSelectorModal isOpen={activeDeviceSelector === 'injector'} onClose={() => setActiveDeviceSelector(null)} title="Injector Output" description="Select CABLE Input (VB-Audio)." devices={outputDevices} selectedDeviceId={injectorDeviceId} onSelect={setInjectorDeviceId} type="output" customOptions={[{ deviceId: '', label: 'None (Don\'t inject)' }]} />
         <DeviceSelectorModal isOpen={activeDeviceSelector === 'monitor'} onClose={() => setActiveDeviceSelector(null)} title="Monitor Output" description="Where YOU hear sounds." devices={outputDevices} selectedDeviceId={monitorDeviceId} onSelect={setMonitorDeviceId} type="output" customOptions={[{ deviceId: '', label: 'Default System Output' }]} />
+
+        {crashInfo && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md">
+            <div className="max-w-md w-full mx-4 p-6 rounded-2xl border border-red-500/30 bg-zinc-950/90 shadow-[0_0_40px_rgba(239,68,68,0.25)] text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+              </div>
+              <h2 className="text-xl font-bold text-red-400 mb-2">{crashInfo.loop ? 'The app keeps crashing' : 'Something went wrong'}</h2>
+              <p className="text-sm text-gray-400 mb-4">
+                {crashInfo.loop ? 'Restarting has failed repeatedly. Please reload manually or restart the app.' : 'The player crashed and is restarting automatically.'}
+              </p>
+              {lastTrackLabel && (
+                <p className="text-xs text-gray-500 font-mono break-all mb-4 bg-black/40 rounded-lg p-2 border border-white/5">
+                  Last track: {lastTrackLabel}
+                </p>
+              )}
+              <div className="flex justify-center gap-3">
+                <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-all active:scale-95">
+                  Reload now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

@@ -31,6 +31,97 @@ let tray = null;
 let isQuitting = false;
 let ipcRegistered = false;
 
+// --- CRASH RECOVERY (v2.9.0) ---
+const crashTimes = new Map(); // window id -> recent crash timestamps
+let gpuCrashReloaded = false; // guard so a GPU crash only reloads once per event
+
+function appendCrashLog(entry) {
+  try {
+    const file = path.join(app.getPath('userData'), 'crash-log.json');
+    let arr = [];
+    try {
+      arr = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!Array.isArray(arr)) arr = [];
+    } catch (e) { arr = []; }
+    arr.push(entry);
+    if (arr.length > 50) arr = arr.slice(-50);
+    fs.writeFileSync(file, JSON.stringify(arr, null, 2));
+  } catch (e) { /* never let crash logging crash the app */ }
+}
+
+function handleRendererGone(win, winName, details) {
+  appendCrashLog({
+    time: Date.now(),
+    reason: details.reason,
+    exitCode: details.exitCode,
+    appVersion: app.getVersion(),
+    window: winName
+  });
+  if (!win || win.isDestroyed()) return;
+
+  if (winName !== 'main') {
+    // Secondary windows silently reload; no dialog.
+    win.webContents.send('renderer-crashed', { reason: details.reason, exitCode: details.exitCode, loop: false });
+    win.webContents.reloadIgnoringCache();
+    return;
+  }
+
+  const now = Date.now();
+  const recent = (crashTimes.get(win.id) || []).filter(t => now - t < 60000);
+  recent.push(now);
+  crashTimes.set(win.id, recent);
+
+  win.webContents.send('renderer-crashed', { reason: details.reason, exitCode: details.exitCode, loop: recent.length >= 3 });
+
+  if (recent.length >= 3) {
+    win.webContents.reloadIgnoringCache(); // give it one more shot silently too
+    dialog.showMessageBox(win, {
+      type: 'error',
+      title: 'NeonRed SoundPad',
+      message: 'The player crashed repeatedly.',
+      buttons: ['Reload', 'Quit']
+    }).then(({ response }) => {
+      if (win && !win.isDestroyed()) {
+        if (response === 0) win.webContents.reloadIgnoringCache();
+        else win.close();
+      }
+    }).catch(() => {});
+  } else {
+    win.webContents.reloadIgnoringCache();
+  }
+}
+
+function attachCrashRecovery(win, winName) {
+  win.webContents.on('render-process-gone', (_e, details) => {
+    handleRendererGone(win, winName, details);
+  });
+
+  let unresponsiveTimer = null;
+  win.webContents.on('unresponsive', () => {
+    if (!win || win.isDestroyed() || unresponsiveTimer) return;
+    unresponsiveTimer = setTimeout(() => {
+      unresponsiveTimer = null;
+      if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache();
+    }, 10000);
+  });
+  win.webContents.on('responsive', () => {
+    if (unresponsiveTimer) { clearTimeout(unresponsiveTimer); unresponsiveTimer = null; }
+  });
+}
+
+app.on('gpu-process-crashed', () => {
+  if (gpuCrashReloaded) return;
+  gpuCrashReloaded = true;
+  appendCrashLog({ time: Date.now(), reason: 'gpu-process-crashed', exitCode: -1, appVersion: app.getVersion(), window: 'gpu' });
+  [mainWindow, miniPlayerWindow, trayWindow].forEach(win => {
+    if (win && !win.isDestroyed()) {
+      if (win === mainWindow) win.webContents.send('renderer-crashed', { reason: 'gpu-process-crashed', exitCode: -1, loop: false });
+      win.webContents.reloadIgnoringCache();
+    }
+  });
+  setTimeout(() => { gpuCrashReloaded = false; }, 5000);
+});
+
 // --- UPDATER ENGINE TUNING (fast + low-bandwidth) ---
 autoUpdater.autoDownload = false; // ask the user first
 autoUpdater.autoInstallOnAppQuit = true;
@@ -148,6 +239,8 @@ function createMiniPlayerWindow() {
 
   miniPlayerWindow.loadURL(miniUrl);
 
+  attachCrashRecovery(miniPlayerWindow, 'mini');
+
   miniPlayerWindow.on('close', (e) => {
       if (!isQuitting) {
           e.preventDefault();
@@ -193,6 +286,8 @@ function createTrayWindow() {
     : `${pathToFileURL(path.join(__dirname, 'build/index.html')).href}?mode=tray`;
 
   trayWindow.loadURL(trayUrl);
+
+  attachCrashRecovery(trayWindow, 'tray');
 
   trayWindow.on('blur', () => {
     if (trayWindow && !trayWindow.isDestroyed()) trayWindow.hide();
@@ -291,6 +386,8 @@ function createWindow() {
     : pathToFileURL(path.join(__dirname, 'build/index.html')).href;
 
   mainWindow.loadURL(startUrl);
+
+  attachCrashRecovery(mainWindow, 'main');
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) {

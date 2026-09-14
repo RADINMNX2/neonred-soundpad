@@ -19,6 +19,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('window-state-changed', sub);
     return () => ipcRenderer.removeListener('window-state-changed', sub);
   },
+
+  // Renderer Crash Recovery (v2.9.0)
+  onRendererCrashed: (callback) => {
+    const sub = (_e, info) => callback(info);
+    ipcRenderer.on('renderer-crashed', sub);
+    return () => ipcRenderer.removeListener('renderer-crashed', sub);
+  },
   
   // Shortcuts
   registerShortcuts: (shortcuts) => ipcRenderer.send('register-shortcuts', shortcuts),

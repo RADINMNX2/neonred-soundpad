@@ -18,6 +18,26 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.9.0",
+    date: "2026-09-14",
+    features: {
+      changed: [
+        "Fixed the app turning black screen when playing certain music tracks — the player now survives renderer or GPU crashes: it records the crash (crash-log.json), automatically reloads, and shows a clean neon-style recovery screen if it ever happens again.",
+        "Local file paths are now percent-encoded before playback, so tracks with Persian/Arabic names, spaces, or # % ? characters load safely instead of crashing the media pipeline.",
+        "Unplayable or corrupted tracks no longer kill playback silently — you get a clear error banner and an automatic one-time skip to the next track.",
+        "Waveform decoding is hardened against out-of-memory crashes (single in-flight decode, sample-count limits), and audio output device switching is race-proofed.",
+      ]
+    },
+    featuresFa: {
+      changed: [
+        "رفع مشکل سیاه‌شدن برنامه هنگام پخش برخی قطعات موسیقی — پخش‌کننده حالا از خرابی فرایند رندر یا GPU جان سالم به در می‌برد: اطلاعات خرابی را ثبت می‌کند (crash-log.json)، خودکار بارگذاری مجدد می‌شود و در صورت تکرار صفحهٔ بازیابی تمیز با ظاهر نئونی نمایش می‌دهد.",
+        "مسیرهای فایل محلی قبل از پخش درصد-رمزنگاری می‌شوند؛ بنابراین قطعه‌هایی با نام فارسی/عربی، فاصله یا کاراکترهای # % ? به‌امنیت پخش می‌شوند و دیگر انجین رسانه را خراب نمی‌کنند.",
+        "قطعه‌های غیرقابل‌پخش یا خراب دیگر بی‌صدا پخش را نمی‌کشند — بنر خطای واضح می‌بینید و یک‌بار خودکار به قطعهٔ بعدی می‌پرید.",
+        "کد شکل موج در برابر کراش کمبود حافظه مقاوم‌سازی شد (تنها یک decode همزمان + محدودیت تعداد نمونه‌ها) و تعویض دستگاه خروجی دیگر race ندارد.",
+      ]
+    },
+  },
+  {
     version: "2.8.0",
     date: "2026-09-14",
     features: {
