@@ -43,15 +43,17 @@ jobs:
           Test-Path "neocable\target\x86_64-pc-windows-msvc\release\neocable_kernel.lib"
           Get-Item "neocable\target\x86_64-pc-windows-msvc\release\neocable_kernel.lib" | Select-Object Length
 
-      - name: Install WDK + Windows SDK (26100)
+      - name: Install WDK (26100)
         shell: pwsh
         run: |
           winget install -e --id Microsoft.WindowsWDK.10.0.26100 `
             --accept-source-agreements --accept-package-agreements --disable-interactivity
-          winget install -e --id Microsoft.WindowsSDK.10.0.26100 `
-            --accept-source-agreements --accept-package-agreements --disable-interactivity
           Write-Host "WDKContentRoot=$env:WDKContentRoot"
           Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\build" -ErrorAction SilentlyContinue | Select-Object Name
+          Write-Host "Include dirs:"
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object Name
+          Write-Host "Bin dirs:"
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -ErrorAction SilentlyContinue | Select-Object Name
 
       - name: Build KMDF driver
         shell: pwsh
